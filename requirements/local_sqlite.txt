@@ -38,7 +38,7 @@ pytest-django==4.11.1  # https://github.com/pytest-dev/pytest-django
 requests==2.32.5  # For API calls to Ollama
 
 # RAG dependencies
-chromadb==0.5.23  # Vector database for RAG
+chromadb==1.0.20  # Vector database for RAG
 langchain==0.3.10  # Document processing
 langchain-community==0.3.10  # Additional document loaders
 pypdf2==3.0.1  # PDF processing
