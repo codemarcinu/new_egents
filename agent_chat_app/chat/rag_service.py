@@ -35,8 +35,7 @@ class RAGService:
                 settings=Settings(
                     anonymized_telemetry=False,
                     allow_reset=True,
-                    is_persistent=True,
-                    telemetry_endpoint="",  # Disable telemetry endpoint
+                    is_persistent=True
                 )
             )
         except Exception as telemetry_error:

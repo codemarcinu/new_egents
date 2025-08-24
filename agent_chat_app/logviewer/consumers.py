@@ -11,17 +11,25 @@ class LogStreamConsumer(AsyncWebsocketConsumer):
     async def connect(self):
         # Log connection attempt
         user = self.scope.get("user")
-        logger.debug(f"WebSocket connection attempt from user: {user}")
+        logger.info(f"WebSocket connection attempt from user: {user}")
         
         # Check if user exists and is authenticated
         if not user or isinstance(user, AnonymousUser) or not user.is_authenticated:
-            logger.debug(f"WebSocket rejected: User not authenticated ({user})")
+            logger.warning(f"WebSocket rejected: User not authenticated (user={user})")
+            await self.send(text_data=json.dumps({
+                'type': 'error',
+                'message': 'Authentication required'
+            }))
             await self.close(code=4401)  # Custom close code for authentication failure
             return
         
         # Check if user is staff
         if not user.is_staff:
-            logger.info(f"WebSocket rejected: User {user.username} is not staff")
+            logger.warning(f"WebSocket rejected: User {user.username} is not staff - only staff members can access logs")
+            await self.send(text_data=json.dumps({
+                'type': 'error',
+                'message': 'Staff privileges required to access logs'
+            }))
             await self.close(code=4403)  # Custom close code for permission denied
             return
 
