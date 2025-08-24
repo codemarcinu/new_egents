@@ -15,7 +15,11 @@
       "Bash(git add:*)",
       "Bash(git commit:*)",
       "Bash(git push:*)",
-      "Bash(gh auth:*)"
+      "Bash(gh auth:*)",
+      "Bash(pip install:*)",
+      "Bash(DJANGO_SETTINGS_MODULE=config.settings.test python -m pytest agent_chat_app/chat/tests/test_models.py -v)",
+      "Bash(pytest:*)",
+      "Bash(pip show:*)"
     ],
     "deny": [],
     "ask": []

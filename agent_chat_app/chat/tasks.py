@@ -29,8 +29,7 @@ def process_document_task(self, document_id: int) -> Optional[dict]:
         logger.info(f"Processing document {document.filename} (ID: {document_id})")
         
         # Update document status
-        document.processed = False
-        document.save()
+        document.mark_as_processing()
         
         # Get full file path
         file_path = document.file_path
@@ -60,8 +59,7 @@ def process_document_task(self, document_id: int) -> Optional[dict]:
                 raise ValueError("Failed to store document chunks in RAG system")
             
             # Mark document as processed
-            document.processed = True
-            document.save()
+            document.mark_as_completed(chunk_count=chunks_created)
             
             logger.info(f"Successfully processed document {document.filename} with {chunks_created} chunks")
             
@@ -98,8 +96,7 @@ def process_document_task(self, document_id: int) -> Optional[dict]:
         # Mark document as failed if max retries exceeded
         try:
             document = Document.objects.get(id=document_id)
-            document.processed = False
-            document.save()
+            document.mark_as_failed(error_message=str(e))
         except Document.DoesNotExist:
             pass
         

@@ -1,13 +1,9 @@
 import pytest
-from django.conf import settings
-from django.test import override_settings
-from rest_framework.test import APIClient
-from django.contrib.auth import get_user_model
-from django.core.cache import cache
 
-from .factories import UserFactory
 
-User = get_user_model()
+def get_user_factory():
+    from .factories import UserFactory
+    return UserFactory
 
 
 # Test database settings
@@ -72,12 +68,14 @@ def test_settings():
 @pytest.fixture
 def api_client():
     """Provide a DRF API client"""
+    from rest_framework.test import APIClient
     return APIClient()
 
 
 @pytest.fixture
 def user():
     """Create a test user"""
+    UserFactory = get_user_factory()
     return UserFactory()
 
 
@@ -92,6 +90,7 @@ def authenticated_client(api_client, user):
 @pytest.fixture
 def admin_user():
     """Create an admin test user"""
+    UserFactory = get_user_factory()
     return UserFactory(is_staff=True, is_superuser=True)
 
 
@@ -106,6 +105,7 @@ def authenticated_admin_client(api_client, admin_user):
 @pytest.fixture(autouse=True)
 def clear_cache():
     """Clear cache before each test"""
+    from django.core.cache import cache
     cache.clear()
 
 

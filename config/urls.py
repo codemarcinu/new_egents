@@ -38,9 +38,9 @@ if settings.DEBUG:
 # API URLS
 urlpatterns += [
     # API v1 endpoints
-    path("api/v1/", include("config.api_router")),
+    path("api/v1/", include("config.api_router", namespace="api-v1")),
     # API legacy (no version) - redirect to v1
-    path("api/", include("config.api_router")),
+    path("api/", include("config.api_router", namespace="api")),
     # DRF auth token
     path("api/auth-token/", obtain_auth_token, name="obtain_auth_token"),
     # API documentation

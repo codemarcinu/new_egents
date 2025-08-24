@@ -69,7 +69,7 @@ class TestHybridRAGService(TestCase):
             file_type='pdf',
             file_path='/tmp/test.pdf',
             file_size=1000,
-            processed=True
+            processing_status='completed'
         )
         
         # Should use RAG when document is referenced
@@ -88,7 +88,7 @@ class TestHybridRAGService(TestCase):
             file_type='pdf',
             file_path='/tmp/api_docs.pdf',
             file_size=1000,
-            processed=True
+            processing_status='completed'
         )
         
         # Should use RAG for specialized technical queries
@@ -238,7 +238,7 @@ class TestHybridRAGService(TestCase):
             file_type='pdf',
             file_path='/tmp/test.pdf',
             file_size=1000,
-            processed=True
+            processing_status='completed'
         )
         
         # Mock RAG service methods

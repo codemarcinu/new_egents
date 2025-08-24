@@ -10,6 +10,11 @@ import numpy as np
 
 # Disable ChromaDB telemetry completely
 os.environ["ANONYMIZED_TELEMETRY"] = "False"
+os.environ["CHROMA_CLIENT_AUTH_PROVIDER"] = ""
+os.environ["CHROMA_SERVER_AUTHN_PROVIDER"] = ""
+
+# Import telemetry fix
+from . import chromadb_fix
 
 logger = logging.getLogger(__name__)
 
@@ -24,14 +29,27 @@ class RAGService:
         db_path = os.path.join(settings.BASE_DIR, "chromadb")
         os.makedirs(db_path, exist_ok=True)
         
-        self.client = chromadb.PersistentClient(
-            path=db_path,
-            settings=Settings(
-                anonymized_telemetry=False,
-                allow_reset=True,
-                is_persistent=True
+        try:
+            self.client = chromadb.PersistentClient(
+                path=db_path,
+                settings=Settings(
+                    anonymized_telemetry=False,
+                    allow_reset=True,
+                    is_persistent=True,
+                    telemetry_endpoint="",  # Disable telemetry endpoint
+                )
             )
-        )
+        except Exception as telemetry_error:
+            # Fallback: ignore telemetry errors
+            logger.warning(f"ChromaDB telemetry initialization warning: {telemetry_error}")
+            self.client = chromadb.PersistentClient(
+                path=db_path,
+                settings=Settings(
+                    anonymized_telemetry=False,
+                    allow_reset=True,
+                    is_persistent=True
+                )
+            )
         
         # Get or create collection
         try:
@@ -97,8 +115,7 @@ class RAGService:
                 )
                 
                 # Mark document as processed
-                document.processed = True
-                document.save()
+                document.mark_as_completed(chunk_count=len(chunk_ids))
                 
                 logger.info(f"Added {len(chunk_ids)} chunks for document {document.filename}")
                 return True
@@ -174,10 +191,10 @@ class RAGService:
         """Get statistics about stored documents"""
         try:
             if user_id:
-                docs_count = Document.objects.filter(user_id=user_id, processed=True).count()
+                docs_count = Document.objects.filter(user_id=user_id, processing_status='completed').count()
                 chunks_count = DocumentChunk.objects.filter(document__user_id=user_id).count()
             else:
-                docs_count = Document.objects.filter(processed=True).count()
+                docs_count = Document.objects.filter(processing_status='completed').count()
                 chunks_count = DocumentChunk.objects.count()
             
             # Get ChromaDB collection count
@@ -214,6 +231,10 @@ class RAGService:
         except Exception as e:
             logger.error(f"Error deleting document: {e}")
             return False
+    
+    def remove_document(self, document_id: int) -> bool:
+        """Remove document from ChromaDB collection (alias for delete_document)"""
+        return self.delete_document(document_id)
     
     def get_collection_info(self) -> dict:
         """Get information about the ChromaDB collection"""
