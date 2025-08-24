@@ -142,6 +142,7 @@ class Receipt(models.Model):
     )
     error_message = models.TextField(blank=True)
     task_id = models.CharField(max_length=255, blank=True)
+    attempts_mistral = models.IntegerField(default=0)
     
     # Timestamps
     created_at = models.DateTimeField(auto_now_add=True)
@@ -208,8 +209,11 @@ class ReceiptLineItem(models.Model):
     # Product information from receipt
     product_name = models.CharField(max_length=300)
     quantity = models.DecimalField(max_digits=10, decimal_places=3)
-    unit_price = models.DecimalField(max_digits=10, decimal_places=2)
-    line_total = models.DecimalField(max_digits=10, decimal_places=2)
+    unit_price = models.DecimalField(max_digits=10, decimal_places=2)  # cena przed rabatem
+    unit_discount = models.DecimalField(max_digits=10, decimal_places=2, default=0)  # rabat jednostkowy
+    discounted_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)  # cena po rabacie
+    line_total = models.DecimalField(max_digits=10, decimal_places=2)  # suma po rabacie
+    expiration_date = models.DateField(null=True, blank=True)
     
     # Matched product
     matched_product = models.ForeignKey(

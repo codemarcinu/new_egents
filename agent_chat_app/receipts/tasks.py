@@ -52,8 +52,9 @@ def process_receipt_task(self, receipt_id):
         )
         
         try:
+            # Use adaptive OCR service with receipt tracking
             raw_text = asyncio.run(
-                ocr_service.extract_text_from_file(receipt.receipt_file.path)
+                ocr_service.extract_text_from_file_with_receipt(receipt.receipt_file.path, receipt)
             )
             
             if not raw_text.strip():
@@ -215,12 +216,15 @@ def process_receipt_task(self, receipt_id):
             except Exception as e:
                 logger.warning(f"Failed to parse date: {e}")
         
-        receipt.mark_as_completed()
+        # Set status to review_pending instead of completed
+        receipt.status = 'review_pending'
+        receipt.processing_step = 'review_pending'
+        receipt.save()
         
-        # Send completion notification
+        # Send review notification
         notifier.notify_receipt_status_update(
-            receipt_id, 'completed', 'done',
-            'Receipt processing completed successfully!'
+            receipt_id, 'review_pending', 'review_pending',
+            'Receipt processing completed - ready for your review!'
         )
         
         logger.info(f"Receipt {receipt_id} processing completed successfully")

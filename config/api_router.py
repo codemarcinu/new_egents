@@ -8,6 +8,7 @@ from agent_chat_app.chat.api.views import (
     DocumentViewSet,
     UserSettingsViewSet,
 )
+from agent_chat_app.logviewer.api.views import LogEntryViewSet
 
 if settings.DEBUG:
     router = DefaultRouter()
@@ -19,6 +20,8 @@ router.register("conversations", ConversationViewSet, basename="conversation")
 router.register("messages", MessageViewSet, basename="message")
 router.register("documents", DocumentViewSet, basename="document")
 router.register("user-settings", UserSettingsViewSet, basename="usersettings")
+# Log Viewer API endpoints
+router.register("logs", LogEntryViewSet, basename="logentry")
 
 app_name = "api"
 urlpatterns = [

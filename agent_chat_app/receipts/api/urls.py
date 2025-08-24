@@ -12,6 +12,7 @@ urlpatterns = [
     path('upload/', views.ReceiptUploadAPIView.as_view(), name='receipt-upload'),
     path('<int:receipt_id>/status/', views.ReceiptStatusAPIView.as_view(), name='receipt-status'),
     path('<int:pk>/', views.ReceiptDetailAPIView.as_view(), name='receipt-detail'),
+    path('<int:receipt_id>/confirm/', views.receipt_confirm_view, name='receipt-confirm'),
     path('', views.ReceiptListAPIView.as_view(), name='receipt-list'),
     path('<int:receipt_id>/delete/', views.receipt_delete_view, name='receipt-delete'),
     

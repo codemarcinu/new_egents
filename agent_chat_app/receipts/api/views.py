@@ -276,6 +276,100 @@ def inventory_summary_view(request):
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+@api_view(['PATCH'])
+@permission_classes([IsAuthenticated])
+def receipt_confirm_view(request, receipt_id):
+    """Confirm and finalize receipt data with user edits."""
+    try:
+        receipt = Receipt.objects.get(id=receipt_id, user=request.user)
+        
+        # Only allow confirmation of receipts pending review
+        if receipt.status != 'review_pending':
+            return Response({
+                'error': f'Cannot confirm receipt with status: {receipt.status}'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        confirmed_data = request.data.get('confirmed_data')
+        if not confirmed_data:
+            return Response({
+                'error': 'confirmed_data is required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Clear existing line items
+        receipt.line_items.all().delete()
+        
+        # Create new line items from confirmed data
+        line_items_created = 0
+        inventory_service = get_inventory_service()
+        
+        for item_data in confirmed_data.get('line_items', []):
+            try:
+                # Calculate discounted price if not provided
+                unit_price = Decimal(str(item_data.get('unit_price', 0)))
+                unit_discount = Decimal(str(item_data.get('unit_discount', 0)))
+                quantity = Decimal(str(item_data.get('quantity', 1)))
+                discounted_price = unit_price - unit_discount
+                line_total = discounted_price * quantity
+                
+                # Create line item
+                line_item = ReceiptLineItem.objects.create(
+                    receipt=receipt,
+                    product_name=item_data.get('product_name', ''),
+                    quantity=quantity,
+                    unit_price=unit_price,
+                    unit_discount=unit_discount,
+                    discounted_price=discounted_price,
+                    line_total=line_total,
+                    expiration_date=item_data.get('expiration_date'),
+                    # TODO: Handle matched_product if provided
+                    match_confidence=1.0,  # User confirmed
+                    match_type='manual'
+                )
+                
+                line_items_created += 1
+                
+                # Update inventory if product is matched
+                if line_item.matched_product:
+                    inventory_service.add_inventory_from_receipt_item(line_item)
+                
+            except Exception as e:
+                logger.error(f"Failed to create line item: {item_data}, error: {e}")
+                continue
+        
+        # Update receipt metadata from confirmed data
+        if confirmed_data.get('store_name'):
+            receipt.store_name = confirmed_data['store_name']
+        
+        if confirmed_data.get('purchased_at'):
+            from django.utils.dateparse import parse_datetime
+            receipt.purchased_at = parse_datetime(confirmed_data['purchased_at'])
+        
+        if confirmed_data.get('total'):
+            receipt.total = Decimal(str(confirmed_data['total']))
+        
+        # Mark as completed
+        receipt.mark_as_completed()
+        
+        logger.info(f"Receipt {receipt_id} confirmed by user with {line_items_created} line items")
+        
+        return Response({
+            'message': 'Receipt confirmed successfully',
+            'receipt_id': receipt.id,
+            'line_items_created': line_items_created,
+            'status': receipt.status
+        })
+        
+    except Receipt.DoesNotExist:
+        return Response({
+            'error': 'Receipt not found'
+        }, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        logger.error(f"Failed to confirm receipt {receipt_id}: {e}")
+        return Response({
+            'error': 'Failed to confirm receipt'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
 @api_view(['DELETE'])
 @permission_classes([IsAuthenticated])
 def receipt_delete_view(request, receipt_id):

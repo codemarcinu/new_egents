@@ -25,6 +25,7 @@ urlpatterns = [
     # Your stuff: custom urls includes go here
     path("chat/", include("agent_chat_app.chat.urls", namespace="chat")),
     path("receipts/", include("agent_chat_app.receipts.urls", namespace="receipts")),
+    path("", include("agent_chat_app.logviewer.urls", namespace="logviewer")),
     # Health check endpoints
     path("", include("agent_chat_app.contrib.health.urls", namespace="health")),
     # ...

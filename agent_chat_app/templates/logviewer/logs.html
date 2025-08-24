@@ -1,0 +1,757 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{{ page_title }} - Agent Chat App{% endblock %}
+
+{% block css %}
+{{ block.super }}
+<style>
+.log-entry {
+    border-left: 4px solid transparent;
+    transition: all 0.3s ease;
+}
+
+.log-entry.DEBUG {
+    border-left-color: #6c757d;
+    background-color: #f8f9fa;
+}
+
+.log-entry.INFO {
+    border-left-color: #0d6efd;
+    background-color: #e7f3ff;
+}
+
+.log-entry.WARNING {
+    border-left-color: #ffc107;
+    background-color: #fff8e1;
+}
+
+.log-entry.ERROR {
+    border-left-color: #dc3545;
+    background-color: #ffebee;
+}
+
+.log-entry.CRITICAL {
+    border-left-color: #6f42c1;
+    background-color: #f3e5f5;
+}
+
+.log-message {
+    font-family: 'Courier New', monospace;
+    font-size: 0.9em;
+    word-break: break-all;
+}
+
+.log-timestamp {
+    font-size: 0.85em;
+    color: #6c757d;
+}
+
+.log-level-badge {
+    font-size: 0.7em;
+    min-width: 60px;
+    text-align: center;
+}
+
+.filters-container {
+    background-color: #f8f9fa;
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 20px;
+}
+
+.live-indicator {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    display: inline-block;
+    margin-right: 5px;
+}
+
+.live-indicator.active {
+    background-color: #28a745;
+    animation: pulse 2s infinite;
+}
+
+.live-indicator.inactive {
+    background-color: #dc3545;
+}
+
+@keyframes pulse {
+    0% { opacity: 1; }
+    50% { opacity: 0.5; }
+    100% { opacity: 1; }
+}
+
+.log-table-container {
+    max-height: 70vh;
+    overflow-y: auto;
+}
+
+.sticky-header {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background-color: white;
+}
+</style>
+{% endblock %}
+
+{% block main %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <!-- Header -->
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <div>
+                    <h2><i class="fas fa-list-alt text-primary"></i> {{ page_title }}</h2>
+                    <p class="text-muted">Monitor and analyze application logs</p>
+                </div>
+                <div class="d-flex gap-2">
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="liveUpdates">
+                        <label class="form-check-label d-flex align-items-center" for="liveUpdates">
+                            <span class="live-indicator inactive" id="liveIndicator"></span>
+                            Live Updates
+                        </label>
+                    </div>
+                    <button class="btn btn-outline-primary btn-sm" onclick="refreshLogs()">
+                        <i class="fas fa-sync-alt"></i> Refresh
+                    </button>
+                    <div class="dropdown">
+                        <button class="btn btn-outline-secondary btn-sm" type="button" data-bs-toggle="dropdown">
+                            <i class="fas fa-download"></i> Export
+                        </button>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item" href="#" onclick="exportLogs('csv')">
+                                <i class="fas fa-file-csv"></i> Export as CSV
+                            </a></li>
+                            <li><a class="dropdown-item" href="#" onclick="exportLogs('json')">
+                                <i class="fas fa-file-code"></i> Export as JSON
+                            </a></li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Filters -->
+            <div class="filters-container">
+                <div class="row">
+                    <div class="col-md-3">
+                        <label for="levelFilter" class="form-label">Log Level</label>
+                        <select class="form-select form-select-sm" id="levelFilter">
+                            <option value="">All Levels</option>
+                            {% for level in log_levels %}
+                            <option value="{{ level }}">{{ level }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label for="searchFilter" class="form-label">Search</label>
+                        <input type="text" class="form-control form-control-sm" id="searchFilter" 
+                               placeholder="Search messages, modules...">
+                    </div>
+                    <div class="col-md-2">
+                        <label for="dateFromFilter" class="form-label">From Date</label>
+                        <input type="datetime-local" class="form-control form-control-sm" id="dateFromFilter">
+                    </div>
+                    <div class="col-md-2">
+                        <label for="dateToFilter" class="form-label">To Date</label>
+                        <input type="datetime-local" class="form-control form-control-sm" id="dateToFilter">
+                    </div>
+                    <div class="col-md-2 d-flex align-items-end">
+                        <button class="btn btn-outline-secondary btn-sm me-2" onclick="clearFilters()">
+                            <i class="fas fa-times"></i> Clear
+                        </button>
+                        <button class="btn btn-primary btn-sm" onclick="applyFilters()">
+                            <i class="fas fa-filter"></i> Filter
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Quick date filters -->
+                <div class="row mt-2">
+                    <div class="col-12">
+                        <small class="text-muted">Quick filters:</small>
+                        <button class="btn btn-outline-info btn-sm ms-2" onclick="setQuickFilter('hour')">Last Hour</button>
+                        <button class="btn btn-outline-info btn-sm" onclick="setQuickFilter('day')">Last Day</button>
+                        <button class="btn btn-outline-info btn-sm" onclick="setQuickFilter('week')">Last Week</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Stats -->
+            <div class="row mb-3" id="statsContainer" style="display: none;">
+                <div class="col-12">
+                    <div class="card">
+                        <div class="card-body">
+                            <h6 class="card-title">Statistics</h6>
+                            <div id="statsContent"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Logs Table -->
+            <div class="card">
+                <div class="card-body p-0">
+                    <div class="log-table-container">
+                        <table class="table table-sm table-hover mb-0">
+                            <thead class="table-light sticky-header">
+                                <tr>
+                                    <th style="width: 180px;">Timestamp</th>
+                                    <th style="width: 80px;">Level</th>
+                                    <th style="width: 150px;">Logger</th>
+                                    <th>Message</th>
+                                    <th style="width: 60px;">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="logsTableBody">
+                                <!-- Log entries will be populated here -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Pagination -->
+            <div class="d-flex justify-content-between align-items-center mt-3">
+                <div>
+                    <small class="text-muted" id="paginationInfo">Loading...</small>
+                </div>
+                <nav>
+                    <ul class="pagination pagination-sm mb-0" id="pagination">
+                        <!-- Pagination will be populated here -->
+                    </ul>
+                </nav>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Log Details Modal -->
+<div class="modal fade" id="logDetailModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Log Entry Details</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="logDetailContent">
+                    <!-- Log details will be populated here -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" onclick="copyToClipboard()">
+                    <i class="fas fa-copy"></i> Copy to Clipboard
+                </button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock main %}
+
+{% block javascript %}
+{{ block.super }}
+<script>
+// Global variables
+let currentPage = 1;
+let currentFilters = {};
+let liveUpdatesEnabled = false;
+let websocket = null;
+let currentLogDetail = null;
+
+// Get CSRF token
+function getCSRFToken() {
+    return document.querySelector('[name=csrfmiddlewaretoken]')?.value || 
+           document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') ||
+           '';
+}
+
+// Initialize page
+document.addEventListener('DOMContentLoaded', function() {
+    loadLogs();
+    setupEventListeners();
+    loadStats();
+});
+
+function setupEventListeners() {
+    // Live updates toggle
+    document.getElementById('liveUpdates').addEventListener('change', function(e) {
+        liveUpdatesEnabled = e.target.checked;
+        if (liveUpdatesEnabled) {
+            connectWebSocket();
+        } else {
+            disconnectWebSocket();
+        }
+        updateLiveIndicator();
+    });
+
+    // Search input with debounce
+    let searchTimeout;
+    document.getElementById('searchFilter').addEventListener('input', function(e) {
+        clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(() => {
+            applyFilters();
+        }, 500);
+    });
+}
+
+function loadLogs(page = 1) {
+    const params = new URLSearchParams({
+        page: page,
+        ...currentFilters
+    });
+
+    // Add loading indicator
+    const tbody = document.getElementById('logsTableBody');
+    tbody.innerHTML = '<tr><td colspan="5" class="text-center">Loading...</td></tr>';
+
+    fetch(`/api/logs/?${params}`, {
+        headers: {
+            'Accept': 'application/json; version=v1',
+            'X-CSRFToken': getCSRFToken()
+        }
+    })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (data && data.results && Array.isArray(data.results)) {
+                displayLogs(data.results);
+                updatePagination(data);
+            } else {
+                console.error('Invalid API response format:', data);
+                displayLogs([]);
+                showAlert('Invalid response format from server', 'warning');
+            }
+        })
+        .catch(error => {
+            console.error('Error loading logs:', error);
+            tbody.innerHTML = '<tr><td colspan="5" class="text-center text-danger">Error loading logs</td></tr>';
+            showAlert(`Error loading logs: ${error.message}`, 'danger');
+        });
+}
+
+function displayLogs(logs) {
+    const tbody = document.getElementById('logsTableBody');
+    tbody.innerHTML = '';
+
+    if (!logs || !Array.isArray(logs) || logs.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">No logs found</td></tr>';
+        return;
+    }
+
+    logs.forEach(log => {
+        try {
+            const row = createLogRow(log);
+            tbody.appendChild(row);
+        } catch (error) {
+            console.error('Error creating log row:', error, log);
+        }
+    });
+}
+
+function createLogRow(log) {
+    const tr = document.createElement('tr');
+    tr.className = `log-entry ${log.level}`;
+    tr.innerHTML = `
+        <td class="log-timestamp">${formatTimestamp(log.timestamp)}</td>
+        <td><span class="badge bg-secondary log-level-badge level-${log.level.toLowerCase()}">${log.level}</span></td>
+        <td class="text-truncate" style="max-width: 150px;" title="${log.logger_name}">${log.logger_name}</td>
+        <td class="log-message text-truncate" style="max-width: 400px;" title="${log.message}">${log.message}</td>
+        <td>
+            <button class="btn btn-outline-info btn-sm" onclick="showLogDetail(${log.id})" title="View Details">
+                <i class="fas fa-eye"></i>
+            </button>
+        </td>
+    `;
+    return tr;
+}
+
+function formatTimestamp(timestamp) {
+    return new Date(timestamp).toLocaleString();
+}
+
+function showLogDetail(logId) {
+    fetch(`/api/logs/${logId}/`, {
+        headers: {
+            'Accept': 'application/json; version=v1',
+            'X-CSRFToken': getCSRFToken()
+        }
+    })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            return response.json();
+        })
+        .then(log => {
+            currentLogDetail = log;
+            displayLogDetail(log);
+            new bootstrap.Modal(document.getElementById('logDetailModal')).show();
+        })
+        .catch(error => {
+            console.error('Error loading log detail:', error);
+            showAlert(`Error loading log details: ${error.message}`, 'danger');
+        });
+}
+
+function displayLogDetail(log) {
+    const content = document.getElementById('logDetailContent');
+    content.innerHTML = `
+        <div class="row">
+            <div class="col-md-6">
+                <strong>ID:</strong> ${log.id}
+            </div>
+            <div class="col-md-6">
+                <strong>Level:</strong> <span class="badge bg-secondary level-${log.level.toLowerCase()}">${log.level}</span>
+            </div>
+        </div>
+        <div class="row mt-2">
+            <div class="col-md-6">
+                <strong>Timestamp:</strong> ${formatTimestamp(log.timestamp)}
+            </div>
+            <div class="col-md-6">
+                <strong>Logger:</strong> ${log.logger_name}
+            </div>
+        </div>
+        ${log.module ? `
+        <div class="row mt-2">
+            <div class="col-md-6">
+                <strong>Module:</strong> ${log.module}
+            </div>
+            <div class="col-md-6">
+                <strong>Function:</strong> ${log.function || 'N/A'}
+            </div>
+        </div>
+        ` : ''}
+        ${log.process_id ? `
+        <div class="row mt-2">
+            <div class="col-md-6">
+                <strong>Process ID:</strong> ${log.process_id}
+            </div>
+            <div class="col-md-6">
+                <strong>Thread ID:</strong> ${log.thread_id || 'N/A'}
+            </div>
+        </div>
+        ` : ''}
+        <div class="mt-3">
+            <strong>Message:</strong>
+            <pre class="bg-light p-2 mt-1" style="white-space: pre-wrap;">${log.message}</pre>
+        </div>
+        ${log.metadata && Object.keys(log.metadata).length > 0 ? `
+        <div class="mt-3">
+            <strong>Metadata:</strong>
+            <pre class="bg-light p-2 mt-1"><code>${log.formatted_metadata}</code></pre>
+        </div>
+        ` : ''}
+    `;
+}
+
+function applyFilters() {
+    currentFilters = {
+        level: document.getElementById('levelFilter').value,
+        search: document.getElementById('searchFilter').value,
+        date_from: document.getElementById('dateFromFilter').value,
+        date_to: document.getElementById('dateToFilter').value,
+    };
+    
+    // Remove empty filters
+    Object.keys(currentFilters).forEach(key => {
+        if (!currentFilters[key]) {
+            delete currentFilters[key];
+        }
+    });
+
+    currentPage = 1;
+    loadLogs(currentPage);
+    loadStats();
+}
+
+function clearFilters() {
+    document.getElementById('levelFilter').value = '';
+    document.getElementById('searchFilter').value = '';
+    document.getElementById('dateFromFilter').value = '';
+    document.getElementById('dateToFilter').value = '';
+    currentFilters = {};
+    currentPage = 1;
+    loadLogs(currentPage);
+    loadStats();
+}
+
+function setQuickFilter(period) {
+    const now = new Date();
+    let fromDate;
+    
+    switch(period) {
+        case 'hour':
+            fromDate = new Date(now.getTime() - 60 * 60 * 1000);
+            break;
+        case 'day':
+            fromDate = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+            break;
+        case 'week':
+            fromDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+            break;
+    }
+    
+    document.getElementById('dateFromFilter').value = fromDate.toISOString().slice(0, 16);
+    document.getElementById('dateToFilter').value = now.toISOString().slice(0, 16);
+    applyFilters();
+}
+
+function refreshLogs() {
+    loadLogs(currentPage);
+    loadStats();
+    showAlert('Logs refreshed', 'success', 2000);
+}
+
+function exportLogs(format) {
+    const params = new URLSearchParams(currentFilters);
+    const url = `/api/logs/export_${format}/?${params}`;
+    
+    // Create a temporary link to trigger download with proper headers
+    const link = document.createElement('a');
+    link.href = url;
+    link.target = '_blank';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    showAlert(`Exporting logs as ${format.toUpperCase()}...`, 'info', 2000);
+}
+
+function loadStats() {
+    const params = new URLSearchParams(currentFilters);
+    fetch(`/api/logs/stats/?${params}`, {
+        headers: {
+            'Accept': 'application/json; version=v1',
+            'X-CSRFToken': getCSRFToken()
+        }
+    })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            return response.json();
+        })
+        .then(stats => {
+            if (stats) {
+                displayStats(stats);
+            } else {
+                console.warn('No stats data received');
+            }
+        })
+        .catch(error => {
+            console.error('Error loading stats:', error);
+            // Hide stats container if there's an error
+            document.getElementById('statsContainer').style.display = 'none';
+        });
+}
+
+function displayStats(stats) {
+    const container = document.getElementById('statsContainer');
+    const content = document.getElementById('statsContent');
+    
+    // Safety check for stats object
+    if (!stats || typeof stats !== 'object') {
+        console.error('Invalid stats object:', stats);
+        container.style.display = 'none';
+        return;
+    }
+    
+    if (!stats.total_logs || stats.total_logs === 0) {
+        container.style.display = 'none';
+        return;
+    }
+
+    container.style.display = 'block';
+    
+    let levelStatsHtml = '<div class="row"><div class="col-md-6"><h6>By Level:</h6><div class="row">';
+    if (stats.level_stats && typeof stats.level_stats === 'object') {
+        Object.entries(stats.level_stats).forEach(([level, count]) => {
+            if (count > 0) {
+                levelStatsHtml += `
+                    <div class="col-6 col-md-4">
+                        <span class="badge bg-secondary level-${level.toLowerCase()} me-1">${level}</span>
+                        <span>${count}</span>
+                    </div>
+                `;
+            }
+        });
+    }
+    levelStatsHtml += '</div></div>';
+    
+    let loggerStatsHtml = '<div class="col-md-6"><h6>Top Loggers:</h6>';
+    if (stats.top_loggers && Array.isArray(stats.top_loggers)) {
+        stats.top_loggers.slice(0, 5).forEach(logger => {
+            if (logger && logger.logger_name && logger.count) {
+                loggerStatsHtml += `<div><strong>${logger.logger_name}:</strong> ${logger.count}</div>`;
+            }
+        });
+    }
+    loggerStatsHtml += '</div></div>';
+    
+    content.innerHTML = `
+        <div class="mb-2"><strong>Total logs:</strong> ${stats.total_logs || 0}</div>
+        ${levelStatsHtml}${loggerStatsHtml}
+    `;
+}
+
+function updatePagination(data) {
+    const info = document.getElementById('paginationInfo');
+    const pagination = document.getElementById('pagination');
+    
+    const start = (currentPage - 1) * 20 + 1;
+    const end = Math.min(start + data.results.length - 1, data.count);
+    info.textContent = `Showing ${start}-${end} of ${data.count} entries`;
+    
+    // Update pagination
+    pagination.innerHTML = '';
+    
+    if (data.previous) {
+        pagination.innerHTML += `
+            <li class="page-item">
+                <a class="page-link" href="#" onclick="loadLogs(${currentPage - 1}); currentPage = ${currentPage - 1};">Previous</a>
+            </li>
+        `;
+    }
+    
+    if (data.next) {
+        pagination.innerHTML += `
+            <li class="page-item">
+                <a class="page-link" href="#" onclick="loadLogs(${currentPage + 1}); currentPage = ${currentPage + 1};">Next</a>
+            </li>
+        `;
+    }
+}
+
+function connectWebSocket() {
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${protocol}//${window.location.host}/ws/logs/`;
+    
+    try {
+        websocket = new WebSocket(wsUrl);
+        
+        websocket.onopen = function(event) {
+            console.log('WebSocket connected');
+            updateLiveIndicator();
+            showAlert('Live updates connected', 'success', 2000);
+        };
+        
+        websocket.onmessage = function(event) {
+            const data = JSON.parse(event.data);
+            if (data.type === 'log_entry') {
+                handleNewLogEntry(data.log);
+            }
+        };
+        
+        websocket.onclose = function(event) {
+            console.log('WebSocket disconnected');
+            websocket = null;
+            if (liveUpdatesEnabled) {
+                // Try to reconnect after 5 seconds
+                setTimeout(connectWebSocket, 5000);
+                showAlert('Live updates disconnected. Trying to reconnect...', 'warning', 3000);
+            }
+        };
+        
+        websocket.onerror = function(error) {
+            console.error('WebSocket error:', error);
+            showAlert('WebSocket connection error', 'danger', 3000);
+        };
+        
+    } catch (error) {
+        console.error('Failed to create WebSocket connection:', error);
+        showAlert('Failed to connect for live updates', 'danger', 3000);
+    }
+}
+
+function disconnectWebSocket() {
+    if (websocket) {
+        websocket.close();
+        websocket = null;
+    }
+    updateLiveIndicator();
+}
+
+function handleNewLogEntry(log) {
+    // Only add new log entries if we're on the first page and no filters are applied
+    if (currentPage === 1 && Object.keys(currentFilters).length === 0) {
+        const tbody = document.getElementById('logsTableBody');
+        const newRow = createLogRow(log);
+        
+        // Add new row at the top
+        tbody.insertBefore(newRow, tbody.firstChild);
+        
+        // Remove last row if we have more than 20 rows (page size)
+        if (tbody.children.length > 20) {
+            tbody.removeChild(tbody.lastChild);
+        }
+        
+        // Highlight new entry briefly
+        newRow.style.backgroundColor = '#e8f4fd';
+        setTimeout(() => {
+            newRow.style.backgroundColor = '';
+        }, 3000);
+        
+        // Update stats periodically (every 10 new entries)
+        if (Math.random() < 0.1) {
+            loadStats();
+        }
+    }
+}
+
+function updateLiveIndicator() {
+    const indicator = document.getElementById('liveIndicator');
+    if (liveUpdatesEnabled) {
+        indicator.className = 'live-indicator active';
+    } else {
+        indicator.className = 'live-indicator inactive';
+    }
+}
+
+function copyToClipboard() {
+    if (currentLogDetail) {
+        const text = JSON.stringify(currentLogDetail, null, 2);
+        navigator.clipboard.writeText(text).then(() => {
+            showAlert('Copied to clipboard', 'success', 2000);
+        }).catch(() => {
+            showAlert('Failed to copy to clipboard', 'danger', 3000);
+        });
+    }
+}
+
+function showAlert(message, type = 'info', duration = 3000) {
+    const alertDiv = document.createElement('div');
+    alertDiv.className = `alert alert-${type} alert-dismissible fade show position-fixed`;
+    alertDiv.style.cssText = 'top: 20px; right: 20px; z-index: 1050; min-width: 300px;';
+    alertDiv.innerHTML = `
+        ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+    
+    document.body.appendChild(alertDiv);
+    
+    setTimeout(() => {
+        alertDiv.remove();
+    }, duration);
+}
+</script>
+
+<!-- CSS for level badges -->
+<style>
+.level-debug { background-color: #6c757d !important; }
+.level-info { background-color: #0d6efd !important; }
+.level-warning { background-color: #ffc107 !important; color: #000 !important; }
+.level-error { background-color: #dc3545 !important; }
+.level-critical { background-color: #6f42c1 !important; }
+</style>
+{% endblock %}

@@ -266,6 +266,60 @@ class GoogleVisionBackend(OCRBackend):
             )
 
 
+class MistralOCRBackend(OCRBackend):
+    """Mistral OCR backend (paid service - limited usage)."""
+    
+    def __init__(self):
+        super().__init__("Mistral OCR")
+    
+    def is_available(self) -> bool:
+        """Check if Mistral OCR API is available."""
+        try:
+            return bool(os.environ.get('MISTRAL_API_KEY'))
+        except Exception:
+            logger.warning("Mistral API key not available")
+            return False
+    
+    async def extract_text(self, image_path: str) -> OCRResult:
+        """Extract text using Mistral OCR API."""
+        try:
+            import httpx
+            
+            api_key = os.environ.get('MISTRAL_API_KEY')
+            if not api_key:
+                raise Exception("MISTRAL_API_KEY not found in environment")
+            
+            # TODO: Replace with actual Mistral OCR API call
+            # This is a placeholder implementation
+            # According to Mistral documentation, you would need to:
+            # 1. Upload image to their service
+            # 2. Call OCR endpoint
+            # 3. Parse response
+            
+            async with httpx.AsyncClient() as client:
+                # Placeholder - implement actual Mistral OCR API call
+                logger.warning("Mistral OCR API call not implemented - placeholder only")
+                
+                # For now, return a high-confidence empty result to indicate "attempted"
+                return OCRResult(
+                    success=False,
+                    text="",
+                    confidence=0.0,
+                    error_message="Mistral OCR implementation pending",
+                    backend_name=self.name
+                )
+            
+        except Exception as e:
+            logger.error(f"Mistral OCR failed: {e}")
+            return OCRResult(
+                success=False,
+                text="",
+                confidence=0.0,
+                error_message=str(e),
+                backend_name=self.name
+            )
+
+
 class ImageProcessor:
     """Image preprocessing for better OCR results."""
     
@@ -326,32 +380,149 @@ class ImageProcessor:
             )
 
 
-class HybridOCRService:
+class AdaptiveHybridOCRService:
     """
-    Hybrid OCR service with multiple backends and fallback strategy.
-    Implements the architecture described in system-paragonow-guide.md
+    Adaptive hybrid OCR service with multiple backends and cost-aware fallback strategy.
+    Implements the adaptive OCR management from the enhanced workflow.
     """
     
-    def __init__(self, confidence_threshold=0.7, max_backends=2, timeout=30):
+    def __init__(self, confidence_threshold=0.75, max_backends=3, timeout=30):
         self.confidence_threshold = confidence_threshold
         self.max_backends = max_backends
         self.timeout = timeout
         
-        # Initialize all available backends
-        self.backends = [
-            EasyOCRBackend(),      # GPU-accelerated, best for receipts
+        # Initialize local (free) backends first - priority order
+        self.local_backends = [
+            EasyOCRBackend(),      # GPU-accelerated, best for receipts  
             TesseractBackend(),    # CPU fallback
-            PaddleOCRBackend(),    # Additional fallback
-            GoogleVisionBackend()  # Premium option
+            PaddleOCRBackend(),    # Additional CPU fallback
+        ]
+        
+        # Initialize paid backends - used sparingly
+        self.paid_backends = [
+            MistralOCRBackend(),   # Paid Mistral OCR
+            GoogleVisionBackend()  # Paid Google Vision
         ]
         
         # Filter to only available backends
-        self.available_backends = [b for b in self.backends if b.is_available()]
+        self.available_local_backends = [b for b in self.local_backends if b.is_available()]
+        self.available_paid_backends = [b for b in self.paid_backends if b.is_available()]
         
-        if not self.available_backends:
+        if not self.available_local_backends and not self.available_paid_backends:
             logger.warning("No OCR backends available!")
         else:
-            logger.info(f"Available OCR backends: {[b.name for b in self.available_backends]}")
+            local_names = [b.name for b in self.available_local_backends]
+            paid_names = [b.name for b in self.available_paid_backends]
+            logger.info(f"Available local OCR backends: {local_names}")
+            logger.info(f"Available paid OCR backends: {paid_names}")
+
+    async def extract_text_from_file_with_receipt(self, image_path: str, receipt) -> str:
+        """
+        Extract text from image file using adaptive OCR approach with receipt tracking.
+        
+        Args:
+            image_path: Path to the image file
+            receipt: Receipt instance for tracking attempts_mistral
+            
+        Returns:
+            Extracted text as string
+        """
+        if not self.available_local_backends and not self.available_paid_backends:
+            raise RuntimeError("No OCR backends are available")
+        
+        # Preprocess image
+        processor = ImageProcessor()
+        processing_result = processor.preprocess_image(image_path)
+        ocr_image_path = processing_result.processed_path if processing_result.success else image_path
+        
+        logger.info(f"Starting adaptive OCR processing for receipt {receipt.id}")
+        
+        results = []
+        best_local_confidence = 0.0
+        
+        # Step 1: Always try local backends first (free)
+        for backend in self.available_local_backends:
+            try:
+                logger.info(f"Trying local OCR backend: {backend.name}")
+                
+                result = await asyncio.wait_for(
+                    backend.extract_text(ocr_image_path),
+                    timeout=self.timeout
+                )
+                
+                results.append(result)
+                logger.info(f"{backend.name} result: success={result.success}, confidence={result.confidence:.2f}")
+                
+                if result.success:
+                    best_local_confidence = max(best_local_confidence, result.confidence)
+                
+                # Stop if we have high confidence result from local backend
+                if result.success and result.confidence >= self.confidence_threshold:
+                    logger.info(f"High confidence result from local {backend.name}, stopping")
+                    break
+                    
+            except asyncio.TimeoutError:
+                logger.warning(f"Local OCR backend {backend.name} timed out")
+                continue
+            except Exception as e:
+                logger.warning(f"Local OCR backend {backend.name} failed: {e}")
+                continue
+        
+        # Step 2: Use paid backends only if local confidence is low AND attempts_mistral < 1
+        if (best_local_confidence < self.confidence_threshold and 
+            receipt.attempts_mistral < 1 and 
+            self.available_paid_backends):
+            
+            logger.info(f"Local confidence {best_local_confidence:.2f} < threshold {self.confidence_threshold:.2f}, trying paid backends")
+            
+            for backend in self.available_paid_backends[:1]:  # Only try first paid backend
+                try:
+                    logger.info(f"Trying paid OCR backend: {backend.name}")
+                    
+                    result = await asyncio.wait_for(
+                        backend.extract_text(ocr_image_path),
+                        timeout=self.timeout * 2  # More time for paid services
+                    )
+                    
+                    results.append(result)
+                    logger.info(f"{backend.name} result: success={result.success}, confidence={result.confidence:.2f}")
+                    
+                    # Increment attempts counter for paid services  
+                    if backend.name == "Mistral OCR":
+                        receipt.attempts_mistral += 1
+                        receipt.save(update_fields=['attempts_mistral'])
+                        logger.info(f"Incremented attempts_mistral to {receipt.attempts_mistral} for receipt {receipt.id}")
+                    
+                    # Stop after first paid attempt
+                    break
+                    
+                except asyncio.TimeoutError:
+                    logger.warning(f"Paid OCR backend {backend.name} timed out")
+                    continue
+                except Exception as e:
+                    logger.warning(f"Paid OCR backend {backend.name} failed: {e}")
+                    continue
+        else:
+            if best_local_confidence >= self.confidence_threshold:
+                logger.info(f"Local confidence {best_local_confidence:.2f} sufficient, skipping paid backends")
+            elif receipt.attempts_mistral >= 1:
+                logger.info(f"Already attempted Mistral OCR {receipt.attempts_mistral} times, skipping paid backends")
+        
+        if not results:
+            raise RuntimeError("All OCR backends failed")
+        
+        # Select best result
+        best_result = self._select_best_result(results)
+        logger.info(f"Selected best result from {best_result.backend_name} with confidence {best_result.confidence:.2f}")
+        
+        # Clean up processed image
+        if processing_result.success and os.path.exists(processing_result.processed_path):
+            try:
+                os.remove(processing_result.processed_path)
+            except OSError:
+                pass
+        
+        return best_result.text
     
     async def extract_text_from_file(self, image_path: str) -> str:
         """
@@ -443,8 +614,16 @@ def get_image_processor() -> ImageProcessor:
     return ImageProcessor()
 
 
-def get_hybrid_ocr_service(confidence_threshold=0.7) -> HybridOCRService:
-    """Get hybrid OCR service instance."""
+def get_hybrid_ocr_service(confidence_threshold=0.75) -> AdaptiveHybridOCRService:
+    """Get adaptive hybrid OCR service instance."""
+    return AdaptiveHybridOCRService(confidence_threshold=confidence_threshold)
+
+
+def get_legacy_hybrid_ocr_service(confidence_threshold=0.7) -> 'HybridOCRService':
+    """Get legacy hybrid OCR service instance (for backward compatibility)."""
+    # Keep old class name for any existing references
+    class HybridOCRService(AdaptiveHybridOCRService):
+        pass
     return HybridOCRService(confidence_threshold=confidence_threshold)
 
 
