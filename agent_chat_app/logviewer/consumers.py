@@ -9,11 +9,20 @@ logger = logging.getLogger(__name__)
 
 class LogStreamConsumer(AsyncWebsocketConsumer):
     async def connect(self):
-        # Check if user is authenticated and is staff
-        if (self.scope["user"] == AnonymousUser or 
-            not self.scope["user"].is_authenticated or 
-            not self.scope["user"].is_staff):
-            await self.close()
+        # Log connection attempt
+        user = self.scope.get("user")
+        logger.debug(f"WebSocket connection attempt from user: {user}")
+        
+        # Check if user exists and is authenticated
+        if not user or isinstance(user, AnonymousUser) or not user.is_authenticated:
+            logger.debug(f"WebSocket rejected: User not authenticated ({user})")
+            await self.close(code=4401)  # Custom close code for authentication failure
+            return
+        
+        # Check if user is staff
+        if not user.is_staff:
+            logger.info(f"WebSocket rejected: User {user.username} is not staff")
+            await self.close(code=4403)  # Custom close code for permission denied
             return
 
         self.room_group_name = 'log_stream'
@@ -25,7 +34,7 @@ class LogStreamConsumer(AsyncWebsocketConsumer):
         )
 
         await self.accept()
-        logger.info(f"User {self.scope['user'].username} connected to log stream")
+        logger.info(f"User {user.username} connected to log stream")
 
     async def disconnect(self, close_code):
         # Leave room group
