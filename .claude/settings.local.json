@@ -11,7 +11,11 @@
       "Bash(python test:*)",
       "Bash(source:*)",
       "Bash(python:*)",
-      "Bash(celery:*)"
+      "Bash(celery:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(gh auth:*)"
     ],
     "deny": [],
     "ask": []
