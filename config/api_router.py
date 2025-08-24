@@ -1,13 +1,23 @@
 from django.conf import settings
-from rest_framework.routers import DefaultRouter
-from rest_framework.routers import SimpleRouter
+from rest_framework.routers import DefaultRouter, SimpleRouter
 
-from agent_chat_app.users.api.views import UserViewSet
+from agent_chat_app.chat.api.views import (
+    ConversationViewSet,
+    MessageViewSet,
+    DocumentViewSet,
+    UserSettingsViewSet,
+)
 
-router = DefaultRouter() if settings.DEBUG else SimpleRouter()
+if settings.DEBUG:
+    router = DefaultRouter()
+else:
+    router = SimpleRouter()
 
-router.register("users", UserViewSet)
-
+# Chat API endpoints
+router.register("conversations", ConversationViewSet, basename="conversation")
+router.register("messages", MessageViewSet, basename="message")
+router.register("documents", DocumentViewSet, basename="document")
+router.register("user-settings", UserSettingsViewSet, basename="usersettings")
 
 app_name = "api"
 urlpatterns = router.urls

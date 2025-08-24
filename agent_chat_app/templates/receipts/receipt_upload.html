@@ -1,0 +1,434 @@
+{% extends "base.html" %}
+{% load crispy_forms_tags %}
+{% load static %}
+
+{% block title %}Receipt Upload{% endblock %}
+
+{% block extra_head %}
+<style>
+.receipt-upload-area {
+    border: 2px dashed #ccc;
+    border-radius: 10px;
+    padding: 40px;
+    text-align: center;
+    transition: all 0.3s ease;
+    cursor: pointer;
+}
+
+.receipt-upload-area:hover {
+    border-color: #007bff;
+    background-color: #f8f9fa;
+}
+
+.receipt-upload-area.dragover {
+    border-color: #28a745;
+    background-color: #d4edda;
+}
+
+.progress-container {
+    display: none;
+    margin-top: 20px;
+}
+
+.receipt-preview {
+    max-width: 300px;
+    max-height: 300px;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.processing-status {
+    display: none;
+    margin-top: 20px;
+}
+
+.status-step {
+    padding: 10px;
+    margin: 5px 0;
+    border-radius: 5px;
+    background-color: #f8f9fa;
+}
+
+.status-step.active {
+    background-color: #cce5ff;
+    border-left: 4px solid #007bff;
+}
+
+.status-step.completed {
+    background-color: #d1e7dd;
+    border-left: 4px solid #28a745;
+}
+
+.status-step.error {
+    background-color: #f8d7da;
+    border-left: 4px solid #dc3545;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-lg-8 mx-auto">
+            <h2 class="mb-4">
+                <i class="fas fa-receipt"></i> Upload Receipt
+            </h2>
+            
+            <!-- Upload Form -->
+            <div class="card mb-4">
+                <div class="card-body">
+                    <form id="receipt-upload-form" enctype="multipart/form-data">
+                        {% csrf_token %}
+                        
+                        <!-- Drag & Drop Area -->
+                        <div class="receipt-upload-area" id="upload-area">
+                            <i class="fas fa-cloud-upload-alt fa-3x text-muted mb-3"></i>
+                            <h4>Drop receipt image here</h4>
+                            <p class="text-muted">Or click to select file</p>
+                            <input type="file" id="receipt-file" name="receipt_file" 
+                                   accept="image/*" style="display: none;">
+                        </div>
+                        
+                        <!-- Selected File Preview -->
+                        <div id="file-preview" style="display: none; margin-top: 20px; text-align: center;">
+                            <h5>Selected File:</h5>
+                            <img id="preview-image" class="receipt-preview" src="#" alt="Receipt preview">
+                            <div class="mt-2">
+                                <span id="file-name" class="badge badge-info"></span>
+                                <span id="file-size" class="badge badge-secondary"></span>
+                            </div>
+                            <button type="submit" class="btn btn-primary mt-3">
+                                <i class="fas fa-upload"></i> Process Receipt
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+            
+            <!-- Progress Bar -->
+            <div class="progress-container">
+                <div class="card">
+                    <div class="card-body">
+                        <h5>Processing Receipt...</h5>
+                        <div class="progress mb-3">
+                            <div class="progress-bar" role="progressbar" 
+                                 style="width: 0%" id="progress-bar">0%</div>
+                        </div>
+                        <div id="progress-message" class="text-muted">Starting...</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Processing Status -->
+            <div class="processing-status">
+                <div class="card">
+                    <div class="card-body">
+                        <h5>Processing Steps</h5>
+                        <div class="status-step" id="step-upload">
+                            <i class="fas fa-upload"></i> File Upload
+                        </div>
+                        <div class="status-step" id="step-ocr">
+                            <i class="fas fa-eye"></i> Text Recognition (OCR)
+                        </div>
+                        <div class="status-step" id="step-parsing">
+                            <i class="fas fa-brain"></i> AI Processing
+                        </div>
+                        <div class="status-step" id="step-matching">
+                            <i class="fas fa-search"></i> Product Matching
+                        </div>
+                        <div class="status-step" id="step-inventory">
+                            <i class="fas fa-boxes"></i> Inventory Update
+                        </div>
+                        <div class="status-step" id="step-complete">
+                            <i class="fas fa-check-circle"></i> Complete
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Results -->
+            <div id="results-container" style="display: none;">
+                <div class="card">
+                    <div class="card-body">
+                        <h5>Processing Complete!</h5>
+                        <div id="results-content"></div>
+                        <div class="mt-3">
+                            <a href="{% url 'receipts:receipt-list' %}" class="btn btn-primary">
+                                View All Receipts
+                            </a>
+                            <button class="btn btn-success" onclick="location.reload();">
+                                Upload Another Receipt
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Error Display -->
+            <div id="error-container" style="display: none;">
+                <div class="alert alert-danger">
+                    <h5>Error</h5>
+                    <div id="error-message"></div>
+                    <button class="btn btn-danger mt-2" onclick="location.reload();">
+                        Try Again
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block javascript %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const uploadArea = document.getElementById('upload-area');
+    const fileInput = document.getElementById('receipt-file');
+    const filePreview = document.getElementById('file-preview');
+    const previewImage = document.getElementById('preview-image');
+    const fileName = document.getElementById('file-name');
+    const fileSize = document.getElementById('file-size');
+    const uploadForm = document.getElementById('receipt-upload-form');
+    const progressContainer = document.querySelector('.progress-container');
+    const processingStatus = document.querySelector('.processing-status');
+    const progressBar = document.getElementById('progress-bar');
+    const progressMessage = document.getElementById('progress-message');
+    
+    // WebSocket for real-time updates
+    let socket = null;
+    let currentReceiptId = null;
+    
+    // Drag and drop functionality
+    uploadArea.addEventListener('click', () => fileInput.click());
+    uploadArea.addEventListener('dragover', handleDragOver);
+    uploadArea.addEventListener('drop', handleDrop);
+    uploadArea.addEventListener('dragleave', handleDragLeave);
+    
+    fileInput.addEventListener('change', handleFileSelect);
+    uploadForm.addEventListener('submit', handleFormSubmit);
+    
+    function handleDragOver(e) {
+        e.preventDefault();
+        uploadArea.classList.add('dragover');
+    }
+    
+    function handleDragLeave(e) {
+        e.preventDefault();
+        uploadArea.classList.remove('dragover');
+    }
+    
+    function handleDrop(e) {
+        e.preventDefault();
+        uploadArea.classList.remove('dragover');
+        
+        const files = e.dataTransfer.files;
+        if (files.length > 0) {
+            fileInput.files = files;
+            handleFileSelect();
+        }
+    }
+    
+    function handleFileSelect() {
+        const file = fileInput.files[0];
+        if (!file) return;
+        
+        // Validate file type
+        if (!file.type.startsWith('image/')) {
+            alert('Please select an image file.');
+            return;
+        }
+        
+        // Show preview
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            previewImage.src = e.target.result;
+            fileName.textContent = file.name;
+            fileSize.textContent = formatFileSize(file.size);
+            filePreview.style.display = 'block';
+        };
+        reader.readAsDataURL(file);
+    }
+    
+    function formatFileSize(bytes) {
+        if (bytes === 0) return '0 Bytes';
+        const k = 1024;
+        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    }
+    
+    async function handleFormSubmit(e) {
+        e.preventDefault();
+        
+        if (!fileInput.files[0]) {
+            alert('Please select a receipt image.');
+            return;
+        }
+        
+        const formData = new FormData();
+        formData.append('receipt_file', fileInput.files[0]);
+        
+        // Get CSRF token
+        const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+        
+        try {
+            // Show progress
+            filePreview.style.display = 'none';
+            progressContainer.style.display = 'block';
+            processingStatus.style.display = 'block';
+            
+            updateStep('step-upload', 'active');
+            updateProgress(10, 'Uploading receipt...');
+            
+            // Upload file
+            const response = await fetch('/receipts/api/upload/', {
+                method: 'POST',
+                body: formData,
+                headers: {
+                    'X-CSRFToken': csrfToken
+                }
+            });
+            
+            if (!response.ok) {
+                throw new Error(`Upload failed: ${response.statusText}`);
+            }
+            
+            const data = await response.json();
+            currentReceiptId = data.receipt_id;
+            
+            updateStep('step-upload', 'completed');
+            updateProgress(20, 'Receipt uploaded successfully');
+            
+            // Connect WebSocket for real-time updates
+            connectWebSocket(currentReceiptId);
+            
+        } catch (error) {
+            console.error('Upload error:', error);
+            showError(`Upload failed: ${error.message}`);
+        }
+    }
+    
+    function connectWebSocket(receiptId) {
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const wsUrl = `${protocol}//${window.location.host}/ws/receipt/${receiptId}/`;
+        
+        socket = new WebSocket(wsUrl);
+        
+        socket.onmessage = function(event) {
+            const data = JSON.parse(event.data);
+            if (data.type === 'status_update') {
+                handleStatusUpdate(data);
+            }
+        };
+        
+        socket.onerror = function(error) {
+            console.error('WebSocket error:', error);
+            showError('Real-time connection lost. Please refresh to check status.');
+        };
+        
+        socket.onclose = function() {
+            console.log('WebSocket connection closed');
+        };
+    }
+    
+    function handleStatusUpdate(data) {
+        updateProgress(data.progress_percentage, data.message);
+        
+        // Update processing steps
+        const stepMap = {
+            'uploaded': 'step-upload',
+            'ocr_in_progress': 'step-ocr',
+            'ocr_completed': 'step-ocr',
+            'parsing_in_progress': 'step-parsing',
+            'parsing_completed': 'step-parsing',
+            'matching_in_progress': 'step-matching',
+            'matching_completed': 'step-matching',
+            'finalizing_inventory': 'step-inventory',
+            'done': 'step-complete'
+        };
+        
+        const currentStep = stepMap[data.processing_step];
+        if (currentStep) {
+            // Mark previous steps as completed
+            const steps = ['step-upload', 'step-ocr', 'step-parsing', 'step-matching', 'step-inventory', 'step-complete'];
+            const currentIndex = steps.indexOf(currentStep);
+            
+            for (let i = 0; i < currentIndex; i++) {
+                updateStep(steps[i], 'completed');
+            }
+            
+            if (data.status === 'completed' && data.processing_step === 'done') {
+                updateStep(currentStep, 'completed');
+                showResults(data.receipt_id);
+            } else if (data.status === 'error') {
+                updateStep(currentStep, 'error');
+                showError(data.message || 'Processing failed');
+            } else {
+                updateStep(currentStep, 'active');
+            }
+        }
+    }
+    
+    function updateProgress(percentage, message) {
+        progressBar.style.width = percentage + '%';
+        progressBar.textContent = percentage + '%';
+        progressMessage.textContent = message;
+    }
+    
+    function updateStep(stepId, status) {
+        const step = document.getElementById(stepId);
+        step.classList.remove('active', 'completed', 'error');
+        step.classList.add(status);
+    }
+    
+    async function showResults(receiptId) {
+        try {
+            // Fetch receipt details
+            const response = await fetch(`/receipts/api/${receiptId}/`);
+            const receipt = await response.json();
+            
+            const resultsContent = document.getElementById('results-content');
+            resultsContent.innerHTML = `
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6>Receipt Information</h6>
+                        <p><strong>Store:</strong> ${receipt.store_name || 'Unknown'}</p>
+                        <p><strong>Total:</strong> ${receipt.total || '0.00'} ${receipt.currency}</p>
+                        <p><strong>Items:</strong> ${receipt.line_items ? receipt.line_items.length : 0}</p>
+                    </div>
+                    <div class="col-md-6">
+                        <h6>Processing Status</h6>
+                        <p class="text-success"><i class="fas fa-check"></i> Successfully processed</p>
+                        <p><small class="text-muted">Receipt ID: ${receiptId}</small></p>
+                    </div>
+                </div>
+            `;
+            
+            document.getElementById('results-container').style.display = 'block';
+            progressContainer.style.display = 'none';
+            
+            // Close WebSocket
+            if (socket) {
+                socket.close();
+            }
+            
+        } catch (error) {
+            console.error('Error fetching results:', error);
+            showError('Processing completed but failed to load results.');
+        }
+    }
+    
+    function showError(message) {
+        document.getElementById('error-message').textContent = message;
+        document.getElementById('error-container').style.display = 'block';
+        progressContainer.style.display = 'none';
+        processingStatus.style.display = 'none';
+        
+        // Close WebSocket
+        if (socket) {
+            socket.close();
+        }
+    }
+});
+</script>
+{% endblock %}

@@ -45,9 +45,14 @@
                                 
                                 <!-- Model Selection -->
                                 <div class="mb-4">
-                                    <label for="{{ form.preferred_model.id_for_label }}" class="form-label">
-                                        <i class="fas fa-robot"></i>
+                                    <label for="{{ form.preferred_model.id_for_label }}" class="form-label d-flex align-items-center">
+                                        <i class="fas fa-robot me-2"></i>
                                         {{ form.preferred_model.label }}
+                                        <button type="button" class="btn btn-sm btn-outline-info ms-2 rounded-circle" 
+                                                data-bs-toggle="tooltip" data-bs-placement="right" 
+                                                title="Choose which AI model to use for conversations. Larger models are more capable but may be slower. Smaller models are faster but less sophisticated.">
+                                            <i class="fas fa-question" style="font-size: 0.8em;"></i>
+                                        </button>
                                     </label>
                                     {{ form.preferred_model }}
                                     <div class="form-text">{{ form.preferred_model.help_text }}</div>
@@ -58,9 +63,14 @@
                                 
                                 <!-- System Instruction -->
                                 <div class="mb-4">
-                                    <label for="{{ form.system_instruction.id_for_label }}" class="form-label">
-                                        <i class="fas fa-file-alt"></i>
+                                    <label for="{{ form.system_instruction.id_for_label }}" class="form-label d-flex align-items-center">
+                                        <i class="fas fa-file-alt me-2"></i>
                                         {{ form.system_instruction.label }}
+                                        <button type="button" class="btn btn-sm btn-outline-info ms-2 rounded-circle" 
+                                                data-bs-toggle="tooltip" data-bs-placement="right" 
+                                                title="Define how the AI assistant should behave and respond. This instruction affects all conversations. Use specific guidelines for better results.">
+                                            <i class="fas fa-question" style="font-size: 0.8em;"></i>
+                                        </button>
                                     </label>
                                     {{ form.system_instruction }}
                                     <div class="form-text">{{ form.system_instruction.help_text }}</div>
@@ -73,9 +83,14 @@
                                 <div class="row">
                                     <div class="col-md-6">
                                         <div class="mb-3">
-                                            <label for="{{ form.max_tokens.id_for_label }}" class="form-label">
-                                                <i class="fas fa-text-width"></i>
+                                            <label for="{{ form.max_tokens.id_for_label }}" class="form-label d-flex align-items-center">
+                                                <i class="fas fa-text-width me-2"></i>
                                                 {{ form.max_tokens.label }}
+                                                <button type="button" class="btn btn-sm btn-outline-info ms-2 rounded-circle" 
+                                                        data-bs-toggle="tooltip" data-bs-placement="right" 
+                                                        title="Maximum length of AI responses. Higher values (4096+) allow longer responses but use more processing time and memory.">
+                                                    <i class="fas fa-question" style="font-size: 0.8em;"></i>
+                                                </button>
                                             </label>
                                             {{ form.max_tokens }}
                                             <div class="form-text">{{ form.max_tokens.help_text }}</div>
@@ -86,9 +101,14 @@
                                     </div>
                                     <div class="col-md-6">
                                         <div class="mb-3">
-                                            <label for="{{ form.temperature.id_for_label }}" class="form-label">
-                                                <i class="fas fa-thermometer-half"></i>
+                                            <label for="{{ form.temperature.id_for_label }}" class="form-label d-flex align-items-center">
+                                                <i class="fas fa-thermometer-half me-2"></i>
                                                 {{ form.temperature.label }}
+                                                <button type="button" class="btn btn-sm btn-outline-info ms-2 rounded-circle" 
+                                                        data-bs-toggle="tooltip" data-bs-placement="right" 
+                                                        title="Controls AI creativity and randomness. Lower values (0.1-0.3) = more focused and consistent. Higher values (0.7-1.0) = more creative and varied responses.">
+                                                    <i class="fas fa-question" style="font-size: 0.8em;"></i>
+                                                </button>
                                             </label>
                                             {{ form.temperature }}
                                             <div class="form-text">{{ form.temperature.help_text }}</div>
@@ -187,8 +207,17 @@ function resetToDefaults() {
     }
 }
 
-// Auto-save indication
+// Initialize tooltips and auto-save indication
 document.addEventListener('DOMContentLoaded', function() {
+    // Initialize Bootstrap tooltips
+    const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl, {
+            trigger: 'hover focus'
+        });
+    });
+    
+    // Auto-save indication
     const form = document.querySelector('form');
     const inputs = form.querySelectorAll('input, textarea, select');
     

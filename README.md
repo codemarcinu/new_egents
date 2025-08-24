@@ -233,12 +233,15 @@ A: To personalne wskazówki dla AI określające jak ma się zachowywać - na pr
 
 ### Architektura systemu
 - **Frontend:** HTML, CSS, JavaScript z Bootstrap 5 i Font Awesome
-- **Backend:** Django (Python) z Django Channels
-- **AI Models:** Ollama z obsługą wielu modeli (Gemma3, GPT-OSS, Qwen2.5VL, mxbai-embed)
-- **Baza danych:** SQLite (lokalna) z modelami UserSettings
-- **Wektory:** ChromaDB
-- **Kolejkowanie:** Celery z Redis
+- **Backend:** Django 5.1.11 z Django Channels i ASGI (Daphne)
+- **AI Models:** Ollama z obsługą wielu modeli (Gemma3, GPT-OSS, Qwen2.5VL, mxbai-embed-large)
+- **Baza danych:** SQLite z PostgreSQL fallback, modele: User, Conversation, Message, Document, DocumentChunk, UserSettings
+- **Wektory:** ChromaDB do przechowywania embeddingów
+- **Kolejkowanie:** Celery z Redis do asynchronicznego przetwarzania dokumentów
 - **WebSocket:** Real-time komunikacja z obsługą wyboru modeli
+- **RAG System:** Hybrydowy system RAG z embeddings i semantic search
+- **Autoryzacja:** Django AllAuth z obsługą MFA
+- **Statyczne pliki:** WhiteNoise do serwowania plików statycznych
 
 ### Wymagania sprzętowe dla administratora
 - **RAM:** minimum 8GB (16GB zalecane)
@@ -292,32 +295,74 @@ A: To personalne wskazówki dla AI określające jak ma się zachowywać - na pr
 
 5. **Skonfiguruj Ollama:**
    ```bash
-   # Instaluj i uruchom modele
-   ollama pull gemma3:4b
-   ollama pull mxbai-embed-large
-   ollama pull gpt-oss:latest
+   # Zainstaluj Ollama (jeśli nie jest zainstalowane)
+   curl -fsSL https://ollama.com/install.sh | sh
+   
+   # Pobierz wymagane modele
+   ollama pull gemma2:2b          # Podstawowy model chat
+   ollama pull mxbai-embed-large  # Model do embeddingów
+   ollama pull gemma3:4b          # Zaawansowany model chat
+   ollama pull gpt-oss:latest     # Alternatywny model
+   ```
+
+6. **Uruchom za pomocą skryptu:**
+   ```bash
+   # Upewnij się, że skrypty mają uprawnienia
+   chmod +x start_app.sh stop_app.sh
+   
+   # Uruchom aplikację (wszystko w jednym)
+   ./start_app.sh
    ```
 
 ### Struktura projektu
 
 ```
 agent_chat_app/
-├── agent_chat_app/           # Główna aplikacja
-│   ├── chat/                 # Moduł chatu i RAG
-│   │   ├── models.py         # Modele danych
-│   │   ├── views.py          # Widoki
-│   │   ├── consumers.py      # WebSocket consumers
-│   │   ├── tasks.py          # Celery tasks
-│   │   ├── rag_service.py    # Serwis RAG
-│   │   └── embeddings.py     # Serwis embeddingów
-│   └── users/                # Zarządzanie użytkownikami
+├── agent_chat_app/           # Główna aplikacja Django
+│   ├── chat/                 # Główny moduł chatu i RAG
+│   │   ├── models.py         # Modele: Conversation, Message, Document, UserSettings
+│   │   ├── views.py          # Widoki: ChatView, DocumentUpload, UserSettings
+│   │   ├── consumers.py      # WebSocket consumers dla real-time chat
+│   │   ├── tasks.py          # Celery tasks do przetwarzania dokumentów
+│   │   ├── services.py       # OllamaService - integracja z AI
+│   │   ├── rag_service.py    # RAGService - podstawowy system RAG
+│   │   ├── hybrid_rag_service.py  # Zaawansowany hybrydowy RAG
+│   │   ├── embeddings.py     # EmbeddingService dla wektorów
+│   │   ├── document_processor.py  # Przetwarzanie PDF/Word/Excel
+│   │   ├── forms.py          # Formularze Django
+│   │   ├── urls.py           # URL patterns
+│   │   └── templates/        # Szablony HTML dla chatu
+│   ├── users/                # Zarządzanie użytkownikami
+│   │   ├── models.py         # Rozszerzony model User
+│   │   ├── adapters.py       # AllAuth adapters
+│   │   ├── api/              # REST API endpoints
+│   │   └── tests/            # Testy jednostkowe
+│   ├── static/               # Pliki statyczne (CSS, JS, obrazy)
+│   └── templates/            # Główne szablony HTML
 ├── config/                   # Konfiguracja Django
-│   ├── settings/             # Ustawienia środowisk
-│   ├── urls.py              # URL routing
-│   └── asgi.py              # ASGI konfiguracja
-├── requirements/             # Zależności
-├── media/                   # Przesłane pliki
-└── templates/               # Szablony HTML
+│   ├── settings/             # Ustawienia środowisk (base, local, production)
+│   │   ├── base.py           # Podstawowa konfiguracja
+│   │   ├── local.py          # Ustawienia deweloperskie
+│   │   └── production.py     # Ustawienia produkcyjne
+│   ├── urls.py              # URL routing główny
+│   ├── asgi.py              # ASGI konfiguracja (WebSocket + HTTP)
+│   ├── wsgi.py              # WSGI konfiguracja (HTTP tylko)
+│   └── celery_app.py        # Konfiguracja Celery
+├── requirements/             # Zależności Python
+│   ├── base.txt             # Podstawowe zależności
+│   ├── local.txt            # Zależności deweloperskie
+│   └── production.txt       # Zależności produkcyjne
+├── utility/                  # Skrypty pomocnicze i narzędzia
+├── docs/                     # Dokumentacja Sphinx
+├── chromadb/                # Baza wektorowa ChromaDB
+├── media/                   # Przesłane pliki użytkowników
+├── venv/                    # Środowisko wirtualne Python
+├── start_app.sh             # Skrypt uruchamiający (Linux/Mac)
+├── stop_app.sh              # Skrypt zatrzymujący
+├── manage.py                # Django management script
+├── pyproject.toml           # Konfiguracja narzędzi (pytest, mypy, ruff)
+├── db.sqlite3               # Baza danych SQLite
+└── INSTRUKCJA_URUCHAMIANIA.md  # Instrukcja w języku polskim
 ```
 
 ---
@@ -334,5 +379,27 @@ Jeśli potrzebujesz pomocy:
 
 **Aplikacja Agent Chat App została stworzona, aby ułatwić pracę z dokumentami i uczynić interakcję z AI bardziej użyteczną i efektywną.**
 
-*Wersja dokumentacji: 1.1 | Data aktualizacji: 2025-08-24*
-*Aktualizacja: Dodano funkcje wyboru modeli AI, ustawienia użytkownika i zoptymalizowany interfejs chatu*
+### 🆕 Najnowsze funkcje (v1.2)
+
+- **💾 Optymalizacja kontekstu:** Inteligentne zarządzanie długimi rozmowami
+- **⚙️ Automatyczne skrypty:** `start_app.sh` i `stop_app.sh` dla łatwego uruchamiania
+- **🔧 Konfiguracja narzędzi:** PyProject.toml z Ruff, MyPy, PyTest
+- **📊 Hybrydowy RAG:** Zaawansowany system wyszukiwania semantycznego
+- **🌐 ASGI/WebSocket:** Real-time komunikacja z pełnym wsparciem asynchronicznym
+- **📱 Responsywny design:** Pełna obsługa urządzeń mobilnych
+- **🔒 AllAuth MFA:** Zaawansowana autoryzacja z dwuskładnikowym uwierzytelnianiem
+
+### 📈 Metryki projektu
+
+- **Linie kodu:** ~15,000+ (Python, HTML, CSS, JS)
+- **Modele Django:** 7 (User, Conversation, Message, Document, DocumentChunk, UserSettings)
+- **Widoki:** 12 (Class-based i function-based)
+- **API Endpoints:** 8 (REST API + WebSocket)
+- **Testy:** 25+ (Unit tests, Integration tests)
+- **Obsługiwane formaty:** PDF, DOCX, XLSX, TXT
+- **Modele AI:** Gemma2, Gemma3, GPT-OSS, mxbai-embed-large
+
+---
+
+*Wersja dokumentacji: 1.2 | Data aktualizacji: 2025-08-24*  
+*Aktualizacja: Kompletna analiza architektury, struktura projektu, nowe funkcje i szczegóły techniczne*

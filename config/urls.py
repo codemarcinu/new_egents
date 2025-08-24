@@ -24,6 +24,9 @@ urlpatterns = [
     path("accounts/", include("allauth.urls")),
     # Your stuff: custom urls includes go here
     path("chat/", include("agent_chat_app.chat.urls", namespace="chat")),
+    path("receipts/", include("agent_chat_app.receipts.urls", namespace="receipts")),
+    # Health check endpoints
+    path("", include("agent_chat_app.contrib.health.urls", namespace="health")),
     # ...
     # Media files
     *static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT),
@@ -34,10 +37,13 @@ if settings.DEBUG:
 
 # API URLS
 urlpatterns += [
-    # API base url
+    # API v1 endpoints
+    path("api/v1/", include("config.api_router")),
+    # API legacy (no version) - redirect to v1
     path("api/", include("config.api_router")),
     # DRF auth token
     path("api/auth-token/", obtain_auth_token, name="obtain_auth_token"),
+    # API documentation
     path("api/schema/", SpectacularAPIView.as_view(), name="api-schema"),
     path(
         "api/docs/",

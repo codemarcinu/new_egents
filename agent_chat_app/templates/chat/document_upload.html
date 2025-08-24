@@ -42,66 +42,180 @@
             </div>
             
             <div class="card">
-                <div class="card-header">
-                    <h5><i class="fas fa-files"></i> Your Documents</h5>
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="fas fa-files"></i> Your Documents</h5>
+                    <div class="d-flex gap-2">
+                        <div class="btn-group" role="group">
+                            <input type="radio" class="btn-check" name="sortBy" id="sort-name" value="name" checked>
+                            <label class="btn btn-outline-primary btn-sm" for="sort-name">
+                                <i class="fas fa-sort-alpha-down"></i> Name
+                            </label>
+                            
+                            <input type="radio" class="btn-check" name="sortBy" id="sort-date" value="date">
+                            <label class="btn btn-outline-primary btn-sm" for="sort-date">
+                                <i class="fas fa-sort-numeric-down"></i> Date
+                            </label>
+                            
+                            <input type="radio" class="btn-check" name="sortBy" id="sort-size" value="size">
+                            <label class="btn btn-outline-primary btn-sm" for="sort-size">
+                                <i class="fas fa-sort-amount-down"></i> Size
+                            </label>
+                        </div>
+                        <div class="dropdown">
+                            <button class="btn btn-outline-secondary btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                                <i class="fas fa-filter"></i> Filter
+                            </button>
+                            <ul class="dropdown-menu">
+                                <li><a class="dropdown-item filter-type" href="#" data-type="all">All Types</a></li>
+                                <li><a class="dropdown-item filter-type" href="#" data-type="pdf">PDF Files</a></li>
+                                <li><a class="dropdown-item filter-type" href="#" data-type="docx">Word Documents</a></li>
+                                <li><a class="dropdown-item filter-type" href="#" data-type="xlsx">Excel Files</a></li>
+                                <li><a class="dropdown-item filter-type" href="#" data-type="txt">Text Files</a></li>
+                                <li><hr class="dropdown-divider"></li>
+                                <li><a class="dropdown-item filter-status" href="#" data-status="all">All Status</a></li>
+                                <li><a class="dropdown-item filter-status" href="#" data-status="processed">Processed</a></li>
+                                <li><a class="dropdown-item filter-status" href="#" data-status="processing">Processing</a></li>
+                            </ul>
+                        </div>
+                    </div>
                 </div>
                 <div class="card-body">
                     {% if documents %}
                         <div class="table-responsive">
-                            <table class="table table-striped">
-                                <thead>
+                            <table class="table table-hover" id="documentsTable">
+                                <thead class="table-light">
                                     <tr>
-                                        <th>Filename</th>
-                                        <th>Type</th>
-                                        <th>Size</th>
-                                        <th>Status</th>
-                                        <th>Uploaded</th>
-                                        <th>Actions</th>
+                                        <th class="sortable" data-column="filename">
+                                            <i class="fas fa-file me-1"></i>Filename 
+                                            <i class="fas fa-sort sort-indicator"></i>
+                                        </th>
+                                        <th class="sortable" data-column="type">
+                                            <i class="fas fa-tag me-1"></i>Type 
+                                            <i class="fas fa-sort sort-indicator"></i>
+                                        </th>
+                                        <th class="sortable" data-column="size">
+                                            <i class="fas fa-weight me-1"></i>Size 
+                                            <i class="fas fa-sort sort-indicator"></i>
+                                        </th>
+                                        <th class="sortable" data-column="status">
+                                            <i class="fas fa-info-circle me-1"></i>Status 
+                                            <i class="fas fa-sort sort-indicator"></i>
+                                        </th>
+                                        <th class="sortable" data-column="uploaded">
+                                            <i class="fas fa-calendar me-1"></i>Uploaded 
+                                            <i class="fas fa-sort sort-indicator"></i>
+                                        </th>
+                                        <th><i class="fas fa-cogs me-1"></i>Actions</th>
                                     </tr>
                                 </thead>
-                                <tbody>
+                                <tbody id="documentsTableBody">
                                     {% for document in documents %}
-                                    <tr>
-                                        <td>
-                                            <i class="fas fa-file{% if document.file_type == '.pdf' %}-pdf text-danger{% elif document.file_type == '.docx' %}-word text-primary{% elif document.file_type == '.xlsx' %}-excel text-success{% else %}-alt{% endif %}"></i>
-                                            {{ document.filename|truncatechars:40 }}
+                                    <tr data-type="{{ document.file_type|slice:"1:"|lower }}" 
+                                        data-status="{% if document.processed %}processed{% else %}processing{% endif %}"
+                                        data-filename="{{ document.filename|lower }}"
+                                        data-size="{{ document.file_size }}"
+                                        data-uploaded="{{ document.uploaded_at|date:'Y-m-d H:i' }}">
+                                        <td class="align-middle">
+                                            <div class="d-flex align-items-center">
+                                                <div class="file-icon me-2">
+                                                    <i class="fas fa-file{% if document.file_type == '.pdf' %}-pdf text-danger{% elif document.file_type == '.docx' %}-word text-primary{% elif document.file_type == '.xlsx' %}-excel text-success{% else %}-alt text-secondary{% endif %} fa-lg"></i>
+                                                </div>
+                                                <div>
+                                                    <div class="fw-bold">{{ document.filename|truncatechars:35 }}</div>
+                                                    {% if document.filename|length > 35 %}
+                                                    <small class="text-muted">{{ document.filename }}</small>
+                                                    {% endif %}
+                                                </div>
+                                            </div>
                                         </td>
-                                        <td>
-                                            <span class="badge bg-secondary">{{ document.file_type|upper }}</span>
+                                        <td class="align-middle">
+                                            <span class="badge bg-{% if document.file_type == '.pdf' %}danger{% elif document.file_type == '.docx' %}primary{% elif document.file_type == '.xlsx' %}success{% else %}secondary{% endif %}">
+                                                {{ document.file_type|slice:"1:"|upper }}
+                                            </span>
                                         </td>
-                                        <td>{{ document.file_size|filesizeformat }}</td>
-                                        <td>
+                                        <td class="align-middle">
+                                            <span class="fw-bold">{{ document.file_size|filesizeformat }}</span>
+                                        </td>
+                                        <td class="align-middle">
                                             {% if document.processed %}
-                                                <span class="badge bg-success">
-                                                    <i class="fas fa-check"></i> Processed
-                                                </span>
+                                                <div class="d-flex align-items-center">
+                                                    <div class="status-indicator bg-success me-2"></div>
+                                                    <span class="badge bg-success-subtle text-success border border-success-subtle">
+                                                        <i class="fas fa-check-circle"></i> Ready
+                                                    </span>
+                                                </div>
                                             {% else %}
-                                                <span class="badge bg-warning">
-                                                    <i class="fas fa-clock"></i> Processing
-                                                </span>
+                                                <div class="d-flex align-items-center">
+                                                    <div class="status-indicator bg-warning me-2 pulse"></div>
+                                                    <span class="badge bg-warning-subtle text-warning border border-warning-subtle">
+                                                        <i class="fas fa-cog fa-spin"></i> Processing
+                                                    </span>
+                                                </div>
                                             {% endif %}
                                         </td>
-                                        <td>{{ document.uploaded_at|date:"M d, H:i" }}</td>
-                                        <td>
-                                            <form method="post" action="{% url 'chat:document_delete' document.id %}" 
-                                                  style="display: inline;" 
-                                                  onsubmit="return confirm('Are you sure you want to delete this document?');">
-                                                {% csrf_token %}
-                                                <button type="submit" class="btn btn-danger btn-sm">
-                                                    <i class="fas fa-trash"></i> Delete
+                                        <td class="align-middle">
+                                            <div class="text-muted small">{{ document.uploaded_at|date:"M d, Y" }}</div>
+                                            <div class="text-muted small">{{ document.uploaded_at|date:"H:i" }}</div>
+                                        </td>
+                                        <td class="align-middle">
+                                            <div class="btn-group">
+                                                <button type="button" class="btn btn-outline-info btn-sm" 
+                                                        data-bs-toggle="tooltip" title="View details">
+                                                    <i class="fas fa-info-circle"></i>
                                                 </button>
-                                            </form>
+                                                <form method="post" action="{% url 'chat:document_delete' document.id %}" 
+                                                      style="display: inline;" 
+                                                      onsubmit="return confirm('Are you sure you want to delete this document? This action cannot be undone.');">
+                                                    {% csrf_token %}
+                                                    <button type="submit" class="btn btn-outline-danger btn-sm"
+                                                            data-bs-toggle="tooltip" title="Delete document">
+                                                        <i class="fas fa-trash-alt"></i>
+                                                    </button>
+                                                </form>
+                                            </div>
                                         </td>
                                     </tr>
                                     {% endfor %}
                                 </tbody>
                             </table>
                         </div>
+                        
+                        <!-- Documents summary -->
+                        <div class="mt-3 p-3 bg-light rounded">
+                            <div class="row text-center">
+                                <div class="col-md-3">
+                                    <div class="h5 text-primary" id="totalDocs">{{ documents|length }}</div>
+                                    <small class="text-muted">Total Documents</small>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="h5 text-success" id="processedDocs">
+                                        {{ documents|length }}
+                                    </div>
+                                    <small class="text-muted">Ready</small>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="h5 text-warning" id="processingDocs">0</div>
+                                    <small class="text-muted">Processing</small>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="h5 text-info" id="totalSize">
+                                        <!-- Will be calculated by JS -->
+                                    </div>
+                                    <small class="text-muted">Total Size</small>
+                                </div>
+                            </div>
+                        </div>
                     {% else %}
-                        <div class="text-center py-4 text-muted">
-                            <i class="fas fa-file-plus fa-3x mb-3"></i>
+                        <div class="text-center py-5 text-muted">
+                            <div class="mb-4">
+                                <i class="fas fa-file-upload text-primary" style="font-size: 4rem; opacity: 0.5;"></i>
+                            </div>
                             <h5>No documents uploaded yet</h5>
-                            <p>Upload your first document to start using RAG-enhanced chat!</p>
+                            <p class="mb-4">Upload your first document to start using RAG-enhanced chat!</p>
+                            <div class="d-flex gap-2 justify-content-center">
+                                <span class="badge bg-light text-dark">Supported: PDF, DOCX, XLSX, TXT</span>
+                                <span class="badge bg-light text-dark">Max size: 10MB</span>
+                            </div>
                         </div>
                     {% endif %}
                 </div>
@@ -149,4 +263,280 @@
         </div>
     </div>
 </div>
+
+<style>
+.status-indicator {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+}
+
+.pulse {
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0% {
+        opacity: 1;
+        transform: scale(1);
+    }
+    50% {
+        opacity: 0.5;
+        transform: scale(1.2);
+    }
+    100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+.sortable {
+    cursor: pointer;
+    user-select: none;
+    transition: all 0.2s ease;
+}
+
+.sortable:hover {
+    background-color: rgba(13, 110, 253, 0.1);
+}
+
+.sort-indicator {
+    font-size: 0.8em;
+    opacity: 0.5;
+    transition: all 0.2s ease;
+}
+
+.sortable.active .sort-indicator {
+    opacity: 1;
+    color: var(--bs-primary);
+}
+
+.file-icon {
+    width: 40px;
+    display: flex;
+    justify-content: center;
+}
+
+.table-hover tbody tr:hover {
+    background-color: rgba(13, 110, 253, 0.05);
+}
+
+.btn-group .btn {
+    border-radius: 0.25rem !important;
+    margin-right: 2px;
+}
+
+.btn-group .btn:last-child {
+    margin-right: 0;
+}
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize tooltips
+    const tooltips = document.querySelectorAll('[data-bs-toggle="tooltip"]');
+    tooltips.forEach(tooltip => {
+        new bootstrap.Tooltip(tooltip);
+    });
+    
+    // Table sorting functionality
+    const sortableHeaders = document.querySelectorAll('.sortable');
+    let currentSort = { column: '', direction: 'asc' };
+    
+    sortableHeaders.forEach(header => {
+        header.addEventListener('click', function() {
+            const column = this.dataset.column;
+            const direction = currentSort.column === column && currentSort.direction === 'asc' ? 'desc' : 'asc';
+            
+            // Update active states
+            sortableHeaders.forEach(h => h.classList.remove('active'));
+            this.classList.add('active');
+            
+            // Update sort indicator
+            const indicator = this.querySelector('.sort-indicator');
+            indicator.className = `fas sort-indicator fa-sort-${direction === 'asc' ? 'up' : 'down'}`;
+            
+            sortTable(column, direction);
+            currentSort = { column, direction };
+        });
+    });
+    
+    // Filter functionality
+    const typeFilters = document.querySelectorAll('.filter-type');
+    const statusFilters = document.querySelectorAll('.filter-status');
+    let currentFilters = { type: 'all', status: 'all' };
+    
+    typeFilters.forEach(filter => {
+        filter.addEventListener('click', function(e) {
+            e.preventDefault();
+            currentFilters.type = this.dataset.type;
+            applyFilters();
+        });
+    });
+    
+    statusFilters.forEach(filter => {
+        filter.addEventListener('click', function(e) {
+            e.preventDefault();
+            currentFilters.status = this.dataset.status;
+            applyFilters();
+        });
+    });
+    
+    // Sort button functionality
+    const sortButtons = document.querySelectorAll('[name="sortBy"]');
+    sortButtons.forEach(button => {
+        button.addEventListener('change', function() {
+            const sortType = this.value;
+            let column, direction = 'asc';
+            
+            switch(sortType) {
+                case 'name':
+                    column = 'filename';
+                    break;
+                case 'date':
+                    column = 'uploaded';
+                    direction = 'desc';
+                    break;
+                case 'size':
+                    column = 'size';
+                    direction = 'desc';
+                    break;
+            }
+            
+            sortTable(column, direction);
+            currentSort = { column, direction };
+            
+            // Update header indicators
+            sortableHeaders.forEach(h => h.classList.remove('active'));
+            const header = document.querySelector(`[data-column="${column}"]`);
+            if (header) {
+                header.classList.add('active');
+                const indicator = header.querySelector('.sort-indicator');
+                indicator.className = `fas sort-indicator fa-sort-${direction === 'asc' ? 'up' : 'down'}`;
+            }
+        });
+    });
+    
+    function sortTable(column, direction) {
+        const tbody = document.getElementById('documentsTableBody');
+        const rows = Array.from(tbody.querySelectorAll('tr'));
+        
+        rows.sort((a, b) => {
+            let aVal, bVal;
+            
+            switch(column) {
+                case 'filename':
+                    aVal = a.dataset.filename;
+                    bVal = b.dataset.filename;
+                    break;
+                case 'size':
+                    aVal = parseInt(a.dataset.size);
+                    bVal = parseInt(b.dataset.size);
+                    break;
+                case 'uploaded':
+                    aVal = new Date(a.dataset.uploaded);
+                    bVal = new Date(b.dataset.uploaded);
+                    break;
+                case 'type':
+                    aVal = a.dataset.type;
+                    bVal = b.dataset.type;
+                    break;
+                case 'status':
+                    aVal = a.dataset.status;
+                    bVal = b.dataset.status;
+                    break;
+                default:
+                    return 0;
+            }
+            
+            if (typeof aVal === 'string') {
+                return direction === 'asc' ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
+            } else {
+                return direction === 'asc' ? aVal - bVal : bVal - aVal;
+            }
+        });
+        
+        rows.forEach(row => tbody.appendChild(row));
+    }
+    
+    function applyFilters() {
+        const rows = document.querySelectorAll('#documentsTableBody tr');
+        let visibleCount = 0;
+        
+        rows.forEach(row => {
+            const type = row.dataset.type;
+            const status = row.dataset.status;
+            
+            const typeMatch = currentFilters.type === 'all' || type === currentFilters.type;
+            const statusMatch = currentFilters.status === 'all' || status === currentFilters.status;
+            
+            if (typeMatch && statusMatch) {
+                row.style.display = '';
+                visibleCount++;
+            } else {
+                row.style.display = 'none';
+            }
+        });
+        
+        // Update visible count if needed
+        if (visibleCount === 0) {
+            const tbody = document.getElementById('documentsTableBody');
+            if (!document.getElementById('no-results')) {
+                const noResults = document.createElement('tr');
+                noResults.id = 'no-results';
+                noResults.innerHTML = `
+                    <td colspan="6" class="text-center py-4 text-muted">
+                        <i class="fas fa-search fa-2x mb-2"></i>
+                        <p class="mb-0">No documents match the current filters</p>
+                    </td>
+                `;
+                tbody.appendChild(noResults);
+            }
+        } else {
+            const noResults = document.getElementById('no-results');
+            if (noResults) {
+                noResults.remove();
+            }
+        }
+    }
+    
+    // Calculate and update statistics
+    function updateStatistics() {
+        const rows = document.querySelectorAll('#documentsTableBody tr[data-type]');
+        let processedCount = 0;
+        let processingCount = 0;
+        let totalSize = 0;
+        
+        rows.forEach(row => {
+            const status = row.dataset.status;
+            const size = parseInt(row.dataset.size);
+            
+            if (status === 'processed') {
+                processedCount++;
+            } else {
+                processingCount++;
+            }
+            
+            totalSize += size;
+        });
+        
+        document.getElementById('totalDocs').textContent = rows.length;
+        document.getElementById('processedDocs').textContent = processedCount;
+        document.getElementById('processingDocs').textContent = processingCount;
+        document.getElementById('totalSize').textContent = formatFileSize(totalSize);
+    }
+    
+    function formatFileSize(bytes) {
+        if (bytes === 0) return '0 B';
+        const k = 1024;
+        const sizes = ['B', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+    }
+    
+    // Initialize statistics
+    updateStatistics();
+});
+</script>
 {% endblock %}

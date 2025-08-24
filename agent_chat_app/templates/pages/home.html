@@ -1,3 +1,173 @@
 {% extends "base.html" %}
+{% load static i18n %}
 
+{% block title %}Home - Agent Chat App{% endblock %}
 
+{% block content %}
+<div class="hero-section py-5 mb-5 bg-primary bg-opacity-10 rounded-3">
+  <div class="container text-center">
+    <div class="row justify-content-center">
+      <div class="col-lg-8">
+        <div class="mb-4">
+          <i class="fas fa-robot text-primary" style="font-size: 4rem;"></i>
+        </div>
+        <h1 class="display-4 fw-bold text-primary mb-3">Agent Chat App</h1>
+        <p class="lead text-muted mb-4">
+          Experience the power of AI-enhanced conversations with advanced RAG capabilities. 
+          Upload your documents and chat with an intelligent assistant that knows your content.
+        </p>
+        {% if request.user.is_authenticated %}
+          <div class="d-flex gap-3 justify-content-center flex-wrap">
+            <a href="{% url 'chat:chat_start' %}" class="btn btn-primary btn-lg">
+              <i class="fas fa-comments me-2"></i>Start Chatting
+            </a>
+            <a href="{% url 'chat:document_upload' %}" class="btn btn-outline-primary btn-lg">
+              <i class="fas fa-upload me-2"></i>Upload Documents
+            </a>
+          </div>
+        {% else %}
+          <div class="d-flex gap-3 justify-content-center flex-wrap">
+            <a href="{% url 'account_signup' %}" class="btn btn-primary btn-lg">
+              <i class="fas fa-user-plus me-2"></i>Get Started
+            </a>
+            <a href="{% url 'account_login' %}" class="btn btn-outline-primary btn-lg">
+              <i class="fas fa-sign-in-alt me-2"></i>Sign In
+            </a>
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="container">
+  <div class="row mb-5">
+    <div class="col-12 text-center mb-5">
+      <h2 class="h3 text-primary fw-bold">Key Features</h2>
+      <p class="text-muted">Discover what makes our AI chat application special</p>
+    </div>
+    <div class="col-md-4 mb-4">
+      <div class="card h-100 shadow-sm border-0 hover-lift">
+        <div class="card-body text-center">
+          <div class="bg-primary bg-opacity-10 rounded-circle d-inline-flex align-items-center justify-content-center mb-3" style="width: 60px; height: 60px;">
+            <i class="fas fa-brain text-primary fa-2x"></i>
+          </div>
+          <h5 class="card-title">AI-Powered Conversations</h5>
+          <p class="card-text text-muted">
+            Chat with advanced AI models including Gemma, LLaMA, and more. Choose the perfect model for your needs.
+          </p>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-4 mb-4">
+      <div class="card h-100 shadow-sm border-0 hover-lift">
+        <div class="card-body text-center">
+          <div class="bg-success bg-opacity-10 rounded-circle d-inline-flex align-items-center justify-content-center mb-3" style="width: 60px; height: 60px;">
+            <i class="fas fa-file-text text-success fa-2x"></i>
+          </div>
+          <h5 class="card-title">RAG Technology</h5>
+          <p class="card-text text-muted">
+            Upload your documents and get intelligent responses based on your content using Retrieval-Augmented Generation.
+          </p>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-4 mb-4">
+      <div class="card h-100 shadow-sm border-0 hover-lift">
+        <div class="card-body text-center">
+          <div class="bg-info bg-opacity-10 rounded-circle d-inline-flex align-items-center justify-content-center mb-3" style="width: 60px; height: 60px;">
+            <i class="fas fa-cogs text-info fa-2x"></i>
+          </div>
+          <h5 class="card-title">Customizable Settings</h5>
+          <p class="card-text text-muted">
+            Fine-tune AI parameters like temperature, max tokens, and system instructions to match your preferences.
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row mb-5">
+    <div class="col-12 text-center mb-4">
+      <h2 class="h3 text-primary fw-bold">Supported Document Types</h2>
+      <p class="text-muted">Upload various document formats for enhanced AI conversations</p>
+    </div>
+    <div class="col-12">
+      <div class="row justify-content-center">
+        <div class="col-6 col-md-3 text-center mb-3">
+          <div class="p-3 border rounded hover-lift">
+            <i class="fas fa-file-pdf text-danger fa-2x mb-2"></i>
+            <div class="fw-bold">PDF</div>
+            <small class="text-muted">Documents</small>
+          </div>
+        </div>
+        <div class="col-6 col-md-3 text-center mb-3">
+          <div class="p-3 border rounded hover-lift">
+            <i class="fas fa-file-word text-primary fa-2x mb-2"></i>
+            <div class="fw-bold">DOCX</div>
+            <small class="text-muted">Word Files</small>
+          </div>
+        </div>
+        <div class="col-6 col-md-3 text-center mb-3">
+          <div class="p-3 border rounded hover-lift">
+            <i class="fas fa-file-excel text-success fa-2x mb-2"></i>
+            <div class="fw-bold">XLSX</div>
+            <small class="text-muted">Spreadsheets</small>
+          </div>
+        </div>
+        <div class="col-6 col-md-3 text-center mb-3">
+          <div class="p-3 border rounded hover-lift">
+            <i class="fas fa-file-alt text-secondary fa-2x mb-2"></i>
+            <div class="fw-bold">TXT</div>
+            <small class="text-muted">Text Files</small>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {% if not request.user.is_authenticated %}
+  <div class="row">
+    <div class="col-12">
+      <div class="card bg-primary text-white shadow-lg">
+        <div class="card-body text-center py-5">
+          <h3 class="card-title mb-3">Ready to get started?</h3>
+          <p class="card-text mb-4">Join thousands of users already using AI-powered conversations</p>
+          <a href="{% url 'account_signup' %}" class="btn btn-light btn-lg">
+            <i class="fas fa-rocket me-2"></i>Sign Up Now
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+<style>
+.hover-lift {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.hover-lift:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 10px 25px rgba(0,0,0,0.15) !important;
+}
+
+.hero-section {
+  background: linear-gradient(135deg, rgba(13, 110, 253, 0.1) 0%, rgba(25, 135, 84, 0.05) 100%);
+  position: relative;
+  overflow: hidden;
+}
+
+.hero-section::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: radial-gradient(circle at 30% 40%, rgba(13, 110, 253, 0.1) 0%, transparent 50%);
+  pointer-events: none;
+}
+</style>
+{% endblock %}

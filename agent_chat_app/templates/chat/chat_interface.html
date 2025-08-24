@@ -66,11 +66,22 @@ html, body {
                                 </button>
                                 <ul class="dropdown-menu dropdown-menu-end">
                                     <li>
+                                        <a class="dropdown-item" href="#" onclick="renameConversation({{ conv.id }}, '{{ conv.title|escapejs }}')">
+                                            <i class="fas fa-edit"></i> Rename
+                                        </a>
+                                    </li>
+                                    <li>
+                                        <a class="dropdown-item" href="#" onclick="archiveConversation({{ conv.id }})">
+                                            <i class="fas fa-archive"></i> Archive
+                                        </a>
+                                    </li>
+                                    <li><hr class="dropdown-divider"></li>
+                                    <li>
                                         <form method="post" action="{% url 'chat:conversation_delete' conv.id %}" 
-                                              onsubmit="return confirm('Are you sure you want to delete this conversation?');">
+                                              onsubmit="return confirm('Are you sure you want to delete this conversation? This action cannot be undone.');">
                                             {% csrf_token %}
                                             <button type="submit" class="dropdown-item text-danger">
-                                                <i class="fas fa-trash"></i> Delete
+                                                <i class="fas fa-trash-alt"></i> Delete
                                             </button>
                                         </form>
                                     </li>
@@ -102,11 +113,37 @@ html, body {
             <!-- Chat Header -->
             <div class="p-3 border-bottom bg-white">
                 <div class="d-flex justify-content-between align-items-center">
-                    <div>
-                        <h4 class="mb-0">{{ conversation.title }}</h4>
-                        <small class="text-muted">
-                            <i class="fas fa-robot"></i>
+                    <div class="flex-grow-1">
+                        <div class="d-flex align-items-center">
+                            <h4 class="mb-0 me-2" id="conversation-title">{{ conversation.title }}</h4>
+                            <button type="button" class="btn btn-sm btn-outline-secondary" 
+                                    onclick="editConversationTitle()" id="edit-title-btn"
+                                    data-bs-toggle="tooltip" title="Edit conversation title">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <div class="d-none align-items-center" id="edit-title-form">
+                                <input type="text" class="form-control form-control-sm me-2" 
+                                       id="title-input" value="{{ conversation.title }}" 
+                                       style="width: 300px; max-width: 50vw;">
+                                <button type="button" class="btn btn-sm btn-success me-1" 
+                                        onclick="saveConversationTitle()">
+                                    <i class="fas fa-check"></i>
+                                </button>
+                                <button type="button" class="btn btn-sm btn-secondary" 
+                                        onclick="cancelEditTitle()">
+                                    <i class="fas fa-times"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <small class="text-muted d-flex align-items-center">
+                            <i class="fas fa-robot me-1"></i>
                             Model: <span id="current-model">{{ user_settings.preferred_model }}</span>
+                            <span class="mx-2">•</span>
+                            <i class="fas fa-calendar me-1"></i>
+                            Created {{ conversation.created_at|date:"M d, Y H:i" }}
+                            <span class="mx-2">•</span>
+                            <i class="fas fa-comment-dots me-1"></i>
+                            <span id="message-count">{{ conversation.messages.count }}</span> messages
                         </small>
                     </div>
                     <div class="d-flex gap-2">
@@ -166,10 +203,10 @@ html, body {
                                     <div class="message-bubble user-message" style="max-width: 85%;">
                                         <div class="bg-primary text-white rounded-3 p-3 shadow-sm">
                                             <div class="d-flex align-items-center mb-2">
-                                                <div class="bg-white bg-opacity-25 rounded-circle p-1 me-2">
+                                                <div class="user-avatar rounded-circle p-1 me-2">
                                                     <i class="fas fa-user text-white" style="font-size: 0.8em;"></i>
                                                 </div>
-                                                <strong class="small">You</strong>
+                                                <strong class="small message-sender">You</strong>
                                                 <small class="ms-auto text-white-50">{{ message.created_at|date:"H:i" }}</small>
                                             </div>
                                             <div style="white-space: pre-wrap; line-height: 1.4; word-wrap: break-word; overflow-wrap: break-word;">{{ message.text }}</div>
@@ -181,10 +218,10 @@ html, body {
                                     <div class="message-bubble ai-message" style="max-width: 85%;">
                                         <div class="bg-white border rounded-3 p-3 shadow-sm">
                                             <div class="d-flex align-items-center mb-2">
-                                                <div class="bg-primary bg-opacity-10 rounded-circle p-1 me-2">
-                                                    <i class="fas fa-robot text-primary" style="font-size: 0.8em;"></i>
+                                                <div class="ai-avatar rounded-circle p-1 me-2">
+                                                    <i class="fas fa-robot text-success" style="font-size: 0.8em;"></i>
                                                 </div>
-                                                <strong class="small">AI Assistant</strong>
+                                                <strong class="small message-sender">AI Assistant</strong>
                                                 <small class="ms-auto text-muted">{{ message.created_at|date:"H:i" }}</small>
                                             </div>
                                             <div style="white-space: pre-wrap; line-height: 1.4; word-wrap: break-word; overflow-wrap: break-word;">{{ message.text }}</div>
@@ -285,25 +322,60 @@ function clearTempInstruction() {
     showToast('Custom instruction cleared', 'info');
 }
 
-// Toast Notifications
-function showToast(message, type = 'info') {
+// Enhanced Toast Notifications
+function showToast(message, type = 'info', duration = 5000) {
     const toastContainer = document.getElementById('toast-container') || createToastContainer();
+    const toastId = 'toast-' + Date.now();
+    
+    // Toast icons
+    const icons = {
+        success: 'fas fa-check-circle',
+        error: 'fas fa-exclamation-triangle',
+        warning: 'fas fa-exclamation-circle',
+        info: 'fas fa-info-circle'
+    };
+    
     const toast = document.createElement('div');
-    toast.className = `toast align-items-center text-white bg-${type === 'info' ? 'primary' : type === 'success' ? 'success' : 'danger'} border-0`;
+    toast.id = toastId;
+    toast.className = `toast toast-${type} align-items-center border-0 mb-2`;
     toast.setAttribute('role', 'alert');
+    toast.setAttribute('aria-live', 'assertive');
+    toast.setAttribute('aria-atomic', 'true');
+    
     toast.innerHTML = `
-        <div class="d-flex">
-            <div class="toast-body">${message}</div>
-            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+        <div class="d-flex align-items-center">
+            <div class="toast-body d-flex align-items-center">
+                <i class="${icons[type] || icons.info} me-2"></i>
+                <span>${message}</span>
+            </div>
+            <button type="button" class="btn-close ${type === 'warning' ? 'btn-close-dark' : 'btn-close-white'} me-2" data-bs-dismiss="toast"></button>
         </div>
     `;
     
     toastContainer.appendChild(toast);
-    const bsToast = new bootstrap.Toast(toast);
+    
+    const bsToast = new bootstrap.Toast(toast, {
+        delay: duration,
+        autohide: duration > 0
+    });
+    
     bsToast.show();
     
     // Remove toast element after it's hidden
-    toast.addEventListener('hidden.bs.toast', () => toast.remove());
+    toast.addEventListener('hidden.bs.toast', () => {
+        toast.remove();
+    });
+    
+    // Animation
+    toast.style.opacity = '0';
+    toast.style.transform = 'translateX(100%)';
+    requestAnimationFrame(() => {
+        toast.style.transition = 'all 0.3s ease';
+        toast.style.opacity = '1';
+        toast.style.transform = 'translateX(0)';
+    });
+    
+    return bsToast;
 }
 
 function createToastContainer() {
@@ -320,6 +392,124 @@ function clearChat() {
     if (confirm('Are you sure you want to clear this conversation? This cannot be undone.')) {
         // This would need backend implementation
         showToast('Chat clearing feature coming soon!', 'info');
+    }
+}
+
+// Conversation Management Functions
+function editConversationTitle() {
+    document.getElementById('conversation-title').style.display = 'none';
+    document.getElementById('edit-title-btn').style.display = 'none';
+    document.getElementById('edit-title-form').classList.remove('d-none');
+    document.getElementById('edit-title-form').classList.add('d-flex');
+    document.getElementById('title-input').focus();
+    document.getElementById('title-input').select();
+}
+
+function saveConversationTitle() {
+    const newTitle = document.getElementById('title-input').value.trim();
+    if (!newTitle) {
+        showToast('Title cannot be empty', 'danger');
+        return;
+    }
+    
+    const conversationId = {{ conversation.id }};
+    
+    // Send AJAX request to update title
+    fetch(`/chat/conversation/${conversationId}/rename/`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+        },
+        body: JSON.stringify({ title: newTitle })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            document.getElementById('conversation-title').textContent = newTitle;
+            showToast('Conversation renamed successfully', 'success');
+            
+            // Update sidebar if the title appears there
+            const sidebarTitle = document.querySelector(`a[href="/chat/${conversationId}/"] h6`);
+            if (sidebarTitle) {
+                sidebarTitle.textContent = newTitle.length > 25 ? newTitle.substring(0, 25) + '...' : newTitle;
+            }
+        } else {
+            showToast(data.error || 'Failed to rename conversation', 'danger');
+        }
+    })
+    .catch(error => {
+        showToast('Error renaming conversation', 'danger');
+        console.error('Error:', error);
+    })
+    .finally(() => {
+        cancelEditTitle();
+    });
+}
+
+function cancelEditTitle() {
+    document.getElementById('conversation-title').style.display = '';
+    document.getElementById('edit-title-btn').style.display = '';
+    document.getElementById('edit-title-form').classList.add('d-none');
+    document.getElementById('edit-title-form').classList.remove('d-flex');
+    document.getElementById('title-input').value = document.getElementById('conversation-title').textContent;
+}
+
+function renameConversation(conversationId, currentTitle) {
+    const newTitle = prompt('Enter new conversation title:', currentTitle);
+    if (newTitle && newTitle.trim() && newTitle.trim() !== currentTitle) {
+        fetch(`/chat/conversation/${conversationId}/rename/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+            },
+            body: JSON.stringify({ title: newTitle.trim() })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showToast('Conversation renamed successfully', 'success');
+                // Reload page to update sidebar
+                location.reload();
+            } else {
+                showToast(data.error || 'Failed to rename conversation', 'danger');
+            }
+        })
+        .catch(error => {
+            showToast('Error renaming conversation', 'danger');
+            console.error('Error:', error);
+        });
+    }
+}
+
+function archiveConversation(conversationId) {
+    if (confirm('Archive this conversation? You can find it in the archived conversations later.')) {
+        fetch(`/chat/conversation/${conversationId}/archive/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showToast('Conversation archived successfully', 'success');
+                // Redirect to chat start if current conversation was archived
+                if (conversationId === {{ conversation.id }}) {
+                    window.location.href = '/chat/';
+                } else {
+                    location.reload();
+                }
+            } else {
+                showToast(data.error || 'Failed to archive conversation', 'danger');
+            }
+        })
+        .catch(error => {
+            showToast('Error archiving conversation', 'danger');
+            console.error('Error:', error);
+        });
     }
 }
 
@@ -376,17 +566,60 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     };
     
+    chatSocket.onopen = function(e) {
+        console.log('Chat socket connected');
+        updateConnectionStatus('connected');
+    };
+    
     chatSocket.onclose = function(e) {
         console.error('Chat socket closed unexpectedly');
+        updateConnectionStatus('disconnected');
+        showToast('Connection lost. Messages may not be sent until reconnected.', 'warning', 0);
+        
+        // Attempt to reconnect after a delay
+        setTimeout(() => {
+            updateConnectionStatus('connecting');
+            // Reload the page to reconnect (simple approach)
+            if (!navigator.onLine) {
+                showToast('You appear to be offline. Please check your internet connection.', 'error', 0);
+            } else {
+                location.reload();
+            }
+        }, 3000);
+    };
+    
+    chatSocket.onerror = function(e) {
+        console.error('Chat socket error:', e);
+        updateConnectionStatus('disconnected');
+        showToast('Connection error occurred', 'error');
     };
     
     // Handle form submission
     if (messageForm) {
+        const submitButton = messageForm.querySelector('button[type="submit"]');
+        const submitButtonText = submitButton.innerHTML;
+        
         messageForm.addEventListener('submit', function(e) {
             e.preventDefault();
             
             const message = messageInput.value.trim();
-            if (message && chatSocket.readyState === WebSocket.OPEN) {
+            if (!message) {
+                messageInput.focus();
+                showToast('Please enter a message', 'warning');
+                return;
+            }
+            
+            if (chatSocket.readyState !== WebSocket.OPEN) {
+                showToast('Connection not available. Please wait for reconnection.', 'error');
+                return;
+            }
+            
+            // Show loading state
+            submitButton.classList.add('btn-loading');
+            submitButton.innerHTML = '<span class="btn-text">' + submitButtonText + '</span>';
+            messageInput.disabled = true;
+            
+            try {
                 chatSocket.send(JSON.stringify({
                     'type': 'chat_message',
                     'message': message,
@@ -394,8 +627,39 @@ document.addEventListener('DOMContentLoaded', function() {
                     'temp_instruction': tempInstruction
                 }));
                 messageInput.value = '';
+                
+                // Update message count
+                const messageCountEl = document.getElementById('message-count');
+                if (messageCountEl) {
+                    const currentCount = parseInt(messageCountEl.textContent);
+                    messageCountEl.textContent = currentCount + 1;
+                }
+                
+            } catch (error) {
+                console.error('Error sending message:', error);
+                showToast('Failed to send message. Please try again.', 'error');
+                
+                // Reset loading state
+                submitButton.classList.remove('btn-loading');
+                submitButton.innerHTML = submitButtonText;
+                messageInput.disabled = false;
+                messageInput.focus();
             }
         });
+        
+        // Reset loading state when message is received
+        const originalOnMessage = chatSocket.onmessage;
+        chatSocket.onmessage = function(e) {
+            // Reset button state
+            submitButton.classList.remove('btn-loading');
+            submitButton.innerHTML = submitButtonText;
+            messageInput.disabled = false;
+            
+            // Call original handler
+            if (originalOnMessage) {
+                originalOnMessage.call(this, e);
+            }
+        };
     }
     
     function addMessage(text, isFromUser, timestamp) {
@@ -415,10 +679,10 @@ document.addEventListener('DOMContentLoaded', function() {
                         <div class="message-bubble user-message" style="max-width: 85%;">
                             <div class="bg-primary text-white rounded-3 p-3 shadow-sm">
                                 <div class="d-flex align-items-center mb-2">
-                                    <div class="bg-white bg-opacity-25 rounded-circle p-1 me-2">
+                                    <div class="user-avatar rounded-circle p-1 me-2">
                                         <i class="fas fa-user text-white" style="font-size: 0.8em;"></i>
                                     </div>
-                                    <strong class="small">You</strong>
+                                    <strong class="small message-sender">You</strong>
                                     <small class="ms-auto text-white-50">${time}</small>
                                 </div>
                                 <div style="white-space: pre-wrap; line-height: 1.4; word-wrap: break-word; overflow-wrap: break-word;">${escapeHtml(text)}</div>
@@ -434,10 +698,10 @@ document.addEventListener('DOMContentLoaded', function() {
                         <div class="message-bubble ai-message" style="max-width: 85%;">
                             <div class="bg-white border rounded-3 p-3 shadow-sm">
                                 <div class="d-flex align-items-center mb-2">
-                                    <div class="bg-primary bg-opacity-10 rounded-circle p-1 me-2">
-                                        <i class="fas fa-robot text-primary" style="font-size: 0.8em;"></i>
+                                    <div class="ai-avatar rounded-circle p-1 me-2">
+                                        <i class="fas fa-robot text-success" style="font-size: 0.8em;"></i>
                                     </div>
-                                    <strong class="small">AI Assistant</strong>
+                                    <strong class="small message-sender">AI Assistant</strong>
                                     <small class="ms-auto text-muted">${time}</small>
                                 </div>
                                 <div style="white-space: pre-wrap; line-height: 1.4; word-wrap: break-word; overflow-wrap: break-word;">${escapeHtml(text)}</div>
@@ -497,6 +761,72 @@ document.addEventListener('DOMContentLoaded', function() {
         div.textContent = text;
         return div.innerHTML;
     }
+    
+    // Connection status management
+    function updateConnectionStatus(status) {
+        let statusElement = document.getElementById('connection-status');
+        
+        if (!statusElement) {
+            statusElement = document.createElement('div');
+            statusElement.id = 'connection-status';
+            statusElement.className = 'connection-status';
+            document.body.appendChild(statusElement);
+        }
+        
+        statusElement.className = `connection-status ${status}`;
+        
+        switch(status) {
+            case 'connected':
+                statusElement.innerHTML = '<i class="fas fa-wifi me-1"></i>Connected';
+                // Auto-hide after 2 seconds
+                setTimeout(() => {
+                    statusElement.style.opacity = '0';
+                    setTimeout(() => statusElement.style.display = 'none', 300);
+                }, 2000);
+                break;
+            case 'disconnected':
+                statusElement.innerHTML = '<i class="fas fa-wifi-slash me-1"></i>Disconnected';
+                statusElement.style.display = 'block';
+                statusElement.style.opacity = '1';
+                break;
+            case 'connecting':
+                statusElement.innerHTML = '<i class="fas fa-circle-notch fa-spin me-1"></i>Reconnecting...';
+                statusElement.style.display = 'block';
+                statusElement.style.opacity = '1';
+                break;
+        }
+    }
+    
+    // Online/offline detection
+    function handleOnlineStatus() {
+        if (navigator.onLine) {
+            const offlineBanner = document.getElementById('offline-banner');
+            if (offlineBanner) {
+                offlineBanner.remove();
+            }
+            showToast('Back online', 'success');
+        } else {
+            showOfflineBanner();
+            showToast('You are offline', 'error', 0);
+        }
+    }
+    
+    function showOfflineBanner() {
+        if (document.getElementById('offline-banner')) return;
+        
+        const banner = document.createElement('div');
+        banner.id = 'offline-banner';
+        banner.className = 'offline-banner';
+        banner.innerHTML = '<i class="fas fa-exclamation-triangle me-1"></i>You are currently offline. Some features may not work properly.';
+        document.body.prepend(banner);
+    }
+    
+    // Listen for online/offline events
+    window.addEventListener('online', handleOnlineStatus);
+    window.addEventListener('offline', handleOnlineStatus);
+    
+    // Initialize connection status
+    updateConnectionStatus('connecting');
 });
 
 // Add hover effect for delete buttons

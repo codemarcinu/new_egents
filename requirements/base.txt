@@ -23,5 +23,27 @@ django-redis==6.0.0  # https://github.com/jazzband/django-redis
 # Django REST Framework
 djangorestframework==3.16.1  # https://github.com/encode/django-rest-framework
 django-cors-headers==4.7.0  # https://github.com/adamchainz/django-cors-headers
+django-filter==24.2  # https://github.com/carltongibson/django-filter
 # DRF-spectacular for api documentation
 drf-spectacular==0.28.0  # https://github.com/tfranzel/drf-spectacular
+
+# Receipt Processing Dependencies
+# ------------------------------------------------------------------------------
+# OCR libraries
+easyocr==1.7.1  # https://github.com/JaidedAI/EasyOCR
+pytesseract==0.3.13  # https://github.com/madmaze/pytesseract
+paddleocr==2.9.1  # https://github.com/PaddlePaddle/PaddleOCR
+opencv-python==4.10.0.84  # https://github.com/opencv/opencv-python
+
+# Fuzzy matching
+fuzzywuzzy==0.18.0  # https://github.com/seatgeek/fuzzywuzzy
+python-levenshtein==0.26.0  # https://github.com/rapidfuzz/python-Levenshtein
+
+# Image processing
+scikit-image==0.24.0  # https://github.com/scikit-image/scikit-image
+
+# Optional: Google Cloud Vision (for premium OCR)
+# google-cloud-vision==3.8.1  # Uncomment if using Google Vision API
+
+# WebSocket support for real-time updates
+channels-redis==4.2.0  # https://github.com/django/channels_redis

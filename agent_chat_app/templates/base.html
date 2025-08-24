@@ -73,7 +73,7 @@
 <body class="{% block bodyclass %}{% endblock bodyclass %}">
   {% block body %}
   <div class="mb-1">
-    <nav class="navbar navbar-expand-md navbar-light bg-light">
+    <nav class="navbar navbar-expand-md navbar-light bg-white shadow-sm">
       <div class="container-fluid">
         <button class="navbar-toggler navbar-toggler-right"
                 type="button"
@@ -84,34 +84,80 @@
                 aria-label="Toggle navigation">
           <span class="navbar-toggler-icon"></span>
         </button>
-        <a class="navbar-brand" href="{% url 'home' %}">Agent Chat App</a>
+        <a class="navbar-brand fw-bold text-primary" href="{% url 'home' %}">
+          <i class="fas fa-robot me-2"></i>Agent Chat App
+        </a>
         <div class="collapse navbar-collapse" id="navbarSupportedContent">
-          <ul class="navbar-nav mr-auto">
-            <li class="nav-item active">
-              <a class="nav-link" href="{% url 'home' %}">Home <span class="visually-hidden">(current)</span></a>
+          <ul class="navbar-nav me-auto">
+            <li class="nav-item">
+              <a class="nav-link {% if request.resolver_match.url_name == 'home' %}active fw-bold{% endif %}" href="{% url 'home' %}">
+                <i class="fas fa-home me-1"></i>Home
+              </a>
             </li>
             <li class="nav-item">
-              <a class="nav-link" href="{% url 'about' %}">About</a>
+              <a class="nav-link {% if request.resolver_match.url_name == 'about' %}active fw-bold{% endif %}" href="{% url 'about' %}">
+                <i class="fas fa-info-circle me-1"></i>About
+              </a>
             </li>
             {% if request.user.is_authenticated %}
               <li class="nav-item">
-                <a class="nav-link"
-                   href="{% url 'users:detail' request.user.username %}">{% translate "My Profile" %}</a>
+                <a class="nav-link {% if 'chat' in request.resolver_match.url_name %}active fw-bold{% endif %}" href="{% url 'chat:chat_start' %}">
+                  <i class="fas fa-comments me-1"></i>Chat
+                </a>
               </li>
               <li class="nav-item">
-                {# URL provided by django-allauth/account/urls.py #}
-                <a class="nav-link" href="{% url 'account_logout' %}">{% translate "Sign Out" %}</a>
+                <a class="nav-link {% if 'document' in request.resolver_match.url_name %}active fw-bold{% endif %}" href="{% url 'chat:document_upload' %}">
+                  <i class="fas fa-upload me-1"></i>Upload Documents
+                </a>
+              </li>
+              <li class="nav-item">
+                <a class="nav-link {% if 'receipts' in request.resolver_match.url_name %}active fw-bold{% endif %}" href="{% url 'receipts:receipt-list' %}">
+                  <i class="fas fa-receipt me-1"></i>Receipts
+                </a>
+              </li>
+              <li class="nav-item">
+                <a class="nav-link {% if 'settings' in request.resolver_match.url_name %}active fw-bold{% endif %}" href="{% url 'chat:user_settings' %}">
+                  <i class="fas fa-cog me-1"></i>Settings
+                </a>
+              </li>
+            {% endif %}
+          </ul>
+          <ul class="navbar-nav">
+            {% if request.user.is_authenticated %}
+              <li class="nav-item dropdown">
+                <a class="nav-link dropdown-toggle d-flex align-items-center" href="#" role="button" data-bs-toggle="dropdown">
+                  <div class="bg-primary rounded-circle d-flex align-items-center justify-content-center me-2" style="width: 32px; height: 32px;">
+                    <i class="fas fa-user text-white small"></i>
+                  </div>
+                  {{ request.user.username|title }}
+                </a>
+                <ul class="dropdown-menu dropdown-menu-end">
+                  <li><a class="dropdown-item" href="{% url 'users:detail' request.user.username %}">
+                    <i class="fas fa-user-circle me-2"></i>{% translate "My Profile" %}
+                  </a></li>
+                  <li><hr class="dropdown-divider"></li>
+                  <li><a class="dropdown-item text-danger" href="{% url 'account_logout' %}">
+                    <i class="fas fa-sign-out-alt me-2"></i>{% translate "Sign Out" %}
+                  </a></li>
+                </ul>
+              </li>
+              <li class="nav-item">
+                <button class="btn btn-outline-secondary btn-sm ms-2" type="button" id="theme-toggle" title="Toggle dark mode">
+                  <i class="fas fa-moon" id="theme-icon"></i>
+                </button>
               </li>
             {% else %}
               {% if ACCOUNT_ALLOW_REGISTRATION %}
                 <li class="nav-item">
-                  {# URL provided by django-allauth/account/urls.py #}
-                  <a id="sign-up-link" class="nav-link" href="{% url 'account_signup' %}">{% translate "Sign Up" %}</a>
+                  <a id="sign-up-link" class="nav-link" href="{% url 'account_signup' %}">
+                    <i class="fas fa-user-plus me-1"></i>{% translate "Sign Up" %}
+                  </a>
                 </li>
               {% endif %}
               <li class="nav-item">
-                {# URL provided by django-allauth/account/urls.py #}
-                <a id="log-in-link" class="nav-link" href="{% url 'account_login' %}">{% translate "Sign In" %}</a>
+                <a id="log-in-link" class="btn btn-primary ms-2" href="{% url 'account_login' %}">
+                  <i class="fas fa-sign-in-alt me-1"></i>{% translate "Sign In" %}
+                </a>
               </li>
             {% endif %}
           </ul>
@@ -152,6 +198,38 @@
       });
     </script>
     {% endcomment %}
-  {% endblock inline_javascript %}
+  <!-- Dark Mode Toggle Script -->
+<script>
+// Dark mode functionality
+(function() {
+  const themeToggle = document.getElementById('theme-toggle');
+  const themeIcon = document.getElementById('theme-icon');
+  
+  // Get saved theme or default to 'light'
+  const savedTheme = localStorage.getItem('bs-theme') || 'light';
+  document.documentElement.setAttribute('data-bs-theme', savedTheme);
+  
+  // Update icon based on current theme
+  function updateIcon(theme) {
+    if (themeIcon) {
+      themeIcon.className = theme === 'dark' ? 'fas fa-sun' : 'fas fa-moon';
+    }
+  }
+  
+  updateIcon(savedTheme);
+  
+  if (themeToggle) {
+    themeToggle.addEventListener('click', function() {
+      const currentTheme = document.documentElement.getAttribute('data-bs-theme');
+      const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+      
+      document.documentElement.setAttribute('data-bs-theme', newTheme);
+      localStorage.setItem('bs-theme', newTheme);
+      updateIcon(newTheme);
+    });
+  }
+})();
+</script>
+{% endblock inline_javascript %}
 </body>
 </html>

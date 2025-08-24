@@ -1,3 +1,174 @@
 {% extends "base.html" %}
+{% load static i18n %}
 
+{% block title %}About - Agent Chat App{% endblock %}
+
+{% block content %}
+<div class="container">
+  <div class="row justify-content-center">
+    <div class="col-lg-8">
+      <div class="text-center mb-5">
+        <div class="mb-4">
+          <i class="fas fa-info-circle text-primary" style="font-size: 3rem;"></i>
+        </div>
+        <h1 class="display-5 fw-bold text-primary mb-3">About Agent Chat App</h1>
+        <p class="lead text-muted">
+          Learn more about our AI-powered chat application and how it can enhance your productivity.
+        </p>
+      </div>
+
+      <div class="card shadow-sm border-0 mb-5">
+        <div class="card-body p-5">
+          <h3 class="text-primary mb-4">What is Agent Chat App?</h3>
+          <p class="mb-4">
+            Agent Chat App is a modern, Django-based web application that combines the power of large language models with 
+            Retrieval-Augmented Generation (RAG) technology. This allows you to have intelligent conversations with AI models 
+            that can understand and reference your own documents and knowledge base.
+          </p>
+          
+          <h4 class="text-primary mb-3">Key Technologies</h4>
+          <div class="row mb-4">
+            <div class="col-md-6">
+              <ul class="list-unstyled">
+                <li class="mb-2"><i class="fas fa-check-circle text-success me-2"></i><strong>Django Framework</strong> - Robust web backend</li>
+                <li class="mb-2"><i class="fas fa-check-circle text-success me-2"></i><strong>Ollama Integration</strong> - Local LLM support</li>
+                <li class="mb-2"><i class="fas fa-check-circle text-success me-2"></i><strong>ChromaDB</strong> - Vector database for embeddings</li>
+                <li class="mb-2"><i class="fas fa-check-circle text-success me-2"></i><strong>WebSocket Support</strong> - Real-time chat interface</li>
+              </ul>
+            </div>
+            <div class="col-md-6">
+              <ul class="list-unstyled">
+                <li class="mb-2"><i class="fas fa-check-circle text-success me-2"></i><strong>Bootstrap 5</strong> - Modern responsive design</li>
+                <li class="mb-2"><i class="fas fa-check-circle text-success me-2"></i><strong>Document Processing</strong> - PDF, DOCX, XLSX, TXT</li>
+                <li class="mb-2"><i class="fas fa-check-circle text-success me-2"></i><strong>Dark Mode</strong> - Theme customization</li>
+                <li class="mb-2"><i class="fas fa-check-circle text-success me-2"></i><strong>User Management</strong> - Authentication & profiles</li>
+              </ul>
+            </div>
+          </div>
+          
+          <h4 class="text-primary mb-3">How RAG Works</h4>
+          <div class="bg-light rounded p-4 mb-4">
+            <div class="row">
+              <div class="col-md-6">
+                <h6 class="fw-bold mb-3">1. Document Processing</h6>
+                <p class="small text-muted mb-3">
+                  Upload your documents which are then processed, chunked into manageable pieces, 
+                  and converted into vector embeddings using the mxbai-embed-large model.
+                </p>
+              </div>
+              <div class="col-md-6">
+                <h6 class="fw-bold mb-3">2. Vector Storage</h6>
+                <p class="small text-muted mb-3">
+                  These embeddings are stored in ChromaDB, a specialized vector database that 
+                  enables fast similarity search and retrieval.
+                </p>
+              </div>
+              <div class="col-md-6">
+                <h6 class="fw-bold mb-3">3. Query Processing</h6>
+                <p class="small text-muted mb-3">
+                  When you ask a question, it's converted to an embedding and similar document 
+                  chunks are retrieved from the database.
+                </p>
+              </div>
+              <div class="col-md-6">
+                <h6 class="fw-bold mb-3">4. Enhanced Response</h6>
+                <p class="small text-muted mb-3">
+                  The AI model uses both your question and the relevant document context 
+                  to provide accurate, informed responses.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="row mb-5">
+        <div class="col-md-6">
+          <div class="card shadow-sm border-0 h-100">
+            <div class="card-body">
+              <div class="text-center mb-3">
+                <i class="fas fa-shield-alt text-primary fa-2x"></i>
+              </div>
+              <h5 class="card-title text-center">Privacy & Security</h5>
+              <ul class="list-unstyled small">
+                <li class="mb-2"><i class="fas fa-lock text-success me-2"></i>Your documents stay on your server</li>
+                <li class="mb-2"><i class="fas fa-user-shield text-success me-2"></i>User authentication and authorization</li>
+                <li class="mb-2"><i class="fas fa-eye-slash text-success me-2"></i>No data sent to external AI services</li>
+                <li class="mb-2"><i class="fas fa-server text-success me-2"></i>Local model execution with Ollama</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-6">
+          <div class="card shadow-sm border-0 h-100">
+            <div class="card-body">
+              <div class="text-center mb-3">
+                <i class="fas fa-rocket text-primary fa-2x"></i>
+              </div>
+              <h5 class="card-title text-center">Performance</h5>
+              <ul class="list-unstyled small">
+                <li class="mb-2"><i class="fas fa-tachometer-alt text-success me-2"></i>Fast document processing</li>
+                <li class="mb-2"><i class="fas fa-search text-success me-2"></i>Efficient vector search</li>
+                <li class="mb-2"><i class="fas fa-comments text-success me-2"></i>Real-time chat interface</li>
+                <li class="mb-2"><i class="fas fa-mobile-alt text-success me-2"></i>Responsive design for all devices</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card bg-primary text-white shadow-sm border-0">
+        <div class="card-body text-center py-4">
+          <h4 class="card-title mb-3">System Requirements</h4>
+          <div class="row">
+            <div class="col-md-4">
+              <h6 class="fw-bold">Backend</h6>
+              <small>
+                Python 3.11+<br>
+                Django 4.2+<br>
+                PostgreSQL or SQLite
+              </small>
+            </div>
+            <div class="col-md-4">
+              <h6 class="fw-bold">AI Models</h6>
+              <small>
+                Ollama Server<br>
+                Gemma2, LLaMA models<br>
+                mxbai-embed-large
+              </small>
+            </div>
+            <div class="col-md-4">
+              <h6 class="fw-bold">Browser</h6>
+              <small>
+                Modern browsers<br>
+                WebSocket support<br>
+                JavaScript enabled
+              </small>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="text-center mt-5">
+        <h4 class="text-primary mb-3">Ready to Start?</h4>
+        <p class="text-muted mb-4">Experience the power of AI-enhanced conversations with your own documents.</p>
+        {% if request.user.is_authenticated %}
+          <a href="{% url 'chat:chat_start' %}" class="btn btn-primary btn-lg">
+            <i class="fas fa-comments me-2"></i>Start Chatting
+          </a>
+        {% else %}
+          <div class="d-flex gap-3 justify-content-center flex-wrap">
+            <a href="{% url 'account_signup' %}" class="btn btn-primary btn-lg">
+              <i class="fas fa-user-plus me-2"></i>Sign Up
+            </a>
+            <a href="{% url 'account_login' %}" class="btn btn-outline-primary btn-lg">
+              <i class="fas fa-sign-in-alt me-2"></i>Sign In
+            </a>
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
 

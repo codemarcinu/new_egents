@@ -1,0 +1,210 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}My Receipts{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="fas fa-receipt"></i> My Receipts</h2>
+        <a href="{% url 'receipts:receipt-upload' %}" class="btn btn-primary">
+            <i class="fas fa-plus"></i> Upload New Receipt
+        </a>
+    </div>
+    
+    {% if receipts %}
+        <div class="row">
+            {% for receipt in receipts %}
+            <div class="col-lg-6 mb-3">
+                <div class="card">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div>
+                                <h5 class="card-title">
+                                    {{ receipt.store_name|default:"Unknown Store" }}
+                                </h5>
+                                <p class="card-text">
+                                    <small class="text-muted">
+                                        {{ receipt.created_at|date:"M d, Y H:i" }}
+                                    </small>
+                                </p>
+                                {% if receipt.total %}
+                                <p class="card-text">
+                                    <strong>Total: {{ receipt.total }} {{ receipt.currency }}</strong>
+                                </p>
+                                {% endif %}
+                                {% if receipt.line_items.all %}
+                                <p class="card-text">
+                                    <small>{{ receipt.line_items.count }} item{{ receipt.line_items.count|pluralize }}</small>
+                                </p>
+                                {% endif %}
+                            </div>
+                            <div>
+                                {% if receipt.status == 'completed' %}
+                                    <span class="badge badge-success">Completed</span>
+                                {% elif receipt.status == 'processing' %}
+                                    <span class="badge badge-warning">Processing</span>
+                                {% elif receipt.status == 'pending' %}
+                                    <span class="badge badge-info">Pending</span>
+                                {% elif receipt.status == 'error' %}
+                                    <span class="badge badge-danger">Error</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                        
+                        {% if receipt.error_message %}
+                        <div class="alert alert-danger alert-sm mt-2">
+                            <small>{{ receipt.error_message }}</small>
+                        </div>
+                        {% endif %}
+                        
+                        <div class="mt-3">
+                            {% if receipt.receipt_file %}
+                            <a href="{{ receipt.receipt_file.url }}" target="_blank" 
+                               class="btn btn-sm btn-outline-primary">
+                                <i class="fas fa-eye"></i> View Image
+                            </a>
+                            {% endif %}
+                            
+                            {% if receipt.status == 'processing' %}
+                            <a href="{% url 'receipts:receipt-upload' %}?track={{ receipt.id }}" 
+                               class="btn btn-sm btn-outline-info">
+                                <i class="fas fa-clock"></i> Track Progress
+                            </a>
+                            {% endif %}
+                            
+                            {% if receipt.status == 'completed' %}
+                            <button class="btn btn-sm btn-outline-success" 
+                                    onclick="showReceiptDetails({{ receipt.id }})">
+                                <i class="fas fa-info-circle"></i> Details
+                            </button>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        
+        <div class="text-center mt-4">
+            <p class="text-muted">
+                Showing {{ receipts|length }} recent receipts
+            </p>
+        </div>
+    {% else %}
+        <div class="text-center py-5">
+            <i class="fas fa-receipt fa-3x text-muted mb-3"></i>
+            <h4 class="text-muted">No receipts yet</h4>
+            <p class="text-muted">Upload your first receipt to get started!</p>
+            <a href="{% url 'receipts:receipt-upload' %}" class="btn btn-primary">
+                <i class="fas fa-plus"></i> Upload Receipt
+            </a>
+        </div>
+    {% endif %}
+</div>
+
+<!-- Receipt Details Modal -->
+<div class="modal fade" id="receiptDetailsModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Receipt Details</h5>
+                <button type="button" class="close" data-dismiss="modal">
+                    <span>&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div id="receipt-details-content">
+                    Loading...
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block javascript %}
+<script>
+async function showReceiptDetails(receiptId) {
+    const modal = $('#receiptDetailsModal');
+    const content = document.getElementById('receipt-details-content');
+    
+    try {
+        content.innerHTML = 'Loading...';
+        modal.modal('show');
+        
+        const response = await fetch(`/receipts/api/${receiptId}/`);
+        const receipt = await response.json();
+        
+        let html = `
+            <div class="row">
+                <div class="col-md-6">
+                    <h6>Receipt Information</h6>
+                    <table class="table table-sm">
+                        <tr><td><strong>Store:</strong></td><td>${receipt.store_name || 'Unknown'}</td></tr>
+                        <tr><td><strong>Date:</strong></td><td>${receipt.purchased_at ? new Date(receipt.purchased_at).toLocaleDateString() : 'Unknown'}</td></tr>
+                        <tr><td><strong>Total:</strong></td><td>${receipt.total || '0.00'} ${receipt.currency}</td></tr>
+                        <tr><td><strong>Status:</strong></td><td><span class="badge badge-success">${receipt.status}</span></td></tr>
+                    </table>
+                </div>
+                <div class="col-md-6">
+                    <h6>Processing Info</h6>
+                    <table class="table table-sm">
+                        <tr><td><strong>Uploaded:</strong></td><td>${new Date(receipt.created_at).toLocaleDateString()}</td></tr>
+                        <tr><td><strong>Processed:</strong></td><td>${receipt.processed_at ? new Date(receipt.processed_at).toLocaleDateString() : 'N/A'}</td></tr>
+                        <tr><td><strong>Items:</strong></td><td>${receipt.line_items ? receipt.line_items.length : 0}</td></tr>
+                    </table>
+                </div>
+            </div>
+        `;
+        
+        if (receipt.line_items && receipt.line_items.length > 0) {
+            html += `
+                <h6 class="mt-4">Items</h6>
+                <div class="table-responsive">
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th>Product</th>
+                                <th>Quantity</th>
+                                <th>Unit Price</th>
+                                <th>Total</th>
+                                <th>Match</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+            `;
+            
+            receipt.line_items.forEach(item => {
+                const matchType = item.match_type;
+                const matchBadge = matchType === 'exact' ? 'success' : 
+                                 matchType === 'fuzzy' ? 'warning' : 
+                                 matchType === 'created' ? 'info' : 'secondary';
+                
+                html += `
+                    <tr>
+                        <td>${item.product_name}</td>
+                        <td>${item.quantity}</td>
+                        <td>${item.unit_price} ${receipt.currency}</td>
+                        <td>${item.line_total} ${receipt.currency}</td>
+                        <td><span class="badge badge-${matchBadge}">${matchType}</span></td>
+                    </tr>
+                `;
+            });
+            
+            html += `
+                        </tbody>
+                    </table>
+                </div>
+            `;
+        }
+        
+        content.innerHTML = html;
+        
+    } catch (error) {
+        console.error('Error loading receipt details:', error);
+        content.innerHTML = '<div class="alert alert-danger">Error loading receipt details.</div>';
+    }
+}
+</script>
+{% endblock %}
