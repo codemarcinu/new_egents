@@ -1,0 +1,518 @@
+{% extends "base.html" %}
+
+{% block title %}AI Chat - {{ conversation.title }}{% endblock %}
+
+{% block bodyclass %}h-100{% endblock %}
+
+{% block main %}
+<style>
+html, body {
+    height: 100%;
+}
+.chat-container {
+    height: calc(100vh - 100px); /* Adjust for navbar and padding */
+}
+</style>
+
+<div class="container-fluid p-0 chat-container">
+    <div class="row h-100">
+        <!-- Sidebar -->
+        <div class="col-md-3 bg-light border-end h-100 d-flex flex-column">
+            <!-- Header -->
+            <div class="p-3 border-bottom">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">
+                        <i class="fas fa-comments text-primary"></i>
+                        Conversations
+                    </h5>
+                    <div class="dropdown">
+                        <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="dropdown">
+                            <i class="fas fa-ellipsis-v"></i>
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-end">
+                            <li><a class="dropdown-item" href="{% url 'chat:user_settings' %}">
+                                <i class="fas fa-cog"></i> Settings
+                            </a></li>
+                            <li><a class="dropdown-item" href="{% url 'chat:document_upload' %}">
+                                <i class="fas fa-upload"></i> Documents
+                            </a></li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Conversations List -->
+            <div class="flex-grow-1 overflow-auto">
+                <div class="list-group list-group-flush">
+                    {% for conv in conversations %}
+                    <div class="list-group-item border-0 {% if conv.id == conversation.id %}active{% endif %} p-0">
+                        <div class="d-flex align-items-center">
+                            <a href="{% url 'chat:chat_view' conv.id %}" 
+                               class="flex-grow-1 text-decoration-none text-reset p-3">
+                                <div class="d-flex w-100 justify-content-between">
+                                    <h6 class="mb-1">{{ conv.title|truncatechars:25 }}</h6>
+                                    <small class="{% if conv.id == conversation.id %}text-white-50{% else %}text-muted{% endif %}">
+                                        {{ conv.created_at|date:"M d" }}
+                                    </small>
+                                </div>
+                                <small class="{% if conv.id == conversation.id %}text-white-50{% else %}text-muted{% endif %}">
+                                    {{ conv.created_at|date:"H:i" }}
+                                </small>
+                            </a>
+                            <div class="dropdown me-2">
+                                <button class="btn btn-sm btn-outline-{% if conv.id == conversation.id %}light{% else %}secondary{% endif %} btn-hover-danger" 
+                                        type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                    <i class="fas fa-ellipsis-v"></i>
+                                </button>
+                                <ul class="dropdown-menu dropdown-menu-end">
+                                    <li>
+                                        <form method="post" action="{% url 'chat:conversation_delete' conv.id %}" 
+                                              onsubmit="return confirm('Are you sure you want to delete this conversation?');">
+                                            {% csrf_token %}
+                                            <button type="submit" class="dropdown-item text-danger">
+                                                <i class="fas fa-trash"></i> Delete
+                                            </button>
+                                        </form>
+                                    </li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                    {% empty %}
+                    <div class="p-3 text-center text-muted">
+                        <i class="fas fa-comments fa-2x mb-2"></i>
+                        <p class="mb-0 small">No conversations yet</p>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            
+            <!-- Action Buttons -->
+            <div class="p-3 border-top">
+                <a href="{% url 'chat:chat_start' %}" class="btn btn-primary w-100 mb-2">
+                    <i class="fas fa-plus"></i> New Chat
+                </a>
+                <a href="{% url 'chat:document_upload' %}" class="btn btn-outline-success w-100">
+                    <i class="fas fa-upload"></i> Upload Documents
+                </a>
+            </div>
+        </div>
+        <!-- Main Chat Area -->
+        <div class="col-md-9 d-flex flex-column h-100">
+            <!-- Chat Header -->
+            <div class="p-3 border-bottom bg-white">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h4 class="mb-0">{{ conversation.title }}</h4>
+                        <small class="text-muted">
+                            <i class="fas fa-robot"></i>
+                            Model: <span id="current-model">{{ user_settings.preferred_model }}</span>
+                        </small>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <!-- Quick Model Selector -->
+                        <div class="dropdown">
+                            <button class="btn btn-sm btn-outline-primary" type="button" data-bs-toggle="dropdown">
+                                <i class="fas fa-robot"></i> Model
+                            </button>
+                            <ul class="dropdown-menu">
+                                {% for model in available_models %}
+                                <li>
+                                    <a class="dropdown-item model-selector" href="#" data-model="{{ model.name }}">
+                                        <i class="fas fa-microchip"></i>
+                                        {{ model.display_name }}
+                                        <small class="text-muted d-block">{{ model.size_human }}</small>
+                                    </a>
+                                </li>
+                                {% endfor %}
+                            </ul>
+                        </div>
+                        
+                        <!-- System Instruction Toggle -->
+                        <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#system-instruction-panel">
+                            <i class="fas fa-file-alt"></i> Instructions
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Collapsible System Instruction Panel -->
+                <div class="collapse mt-3" id="system-instruction-panel">
+                    <div class="card card-body bg-light">
+                        <div class="mb-2">
+                            <label for="temp-system-instruction" class="form-label small">
+                                <strong>System Instruction for this conversation:</strong>
+                            </label>
+                            <textarea id="temp-system-instruction" class="form-control form-control-sm" rows="2" placeholder="Override default system instruction..."></textarea>
+                        </div>
+                        <div class="d-flex gap-2">
+                            <button type="button" class="btn btn-sm btn-primary" onclick="applyTempInstruction()">
+                                Apply for this conversation
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="clearTempInstruction()">
+                                Clear
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Messages Area -->
+            <div id="chat-messages" class="flex-grow-1 overflow-auto p-3" style="background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);">
+                {% for message in conversation.messages.all %}
+                    <div class="mb-3">
+                        <div class="d-flex align-items-start">
+                            {% if message.is_from_user %}
+                                <div class="d-flex justify-content-end w-100">
+                                    <div class="message-bubble user-message" style="max-width: 85%;">
+                                        <div class="bg-primary text-white rounded-3 p-3 shadow-sm">
+                                            <div class="d-flex align-items-center mb-2">
+                                                <div class="bg-white bg-opacity-25 rounded-circle p-1 me-2">
+                                                    <i class="fas fa-user text-white" style="font-size: 0.8em;"></i>
+                                                </div>
+                                                <strong class="small">You</strong>
+                                                <small class="ms-auto text-white-50">{{ message.created_at|date:"H:i" }}</small>
+                                            </div>
+                                            <div style="white-space: pre-wrap; line-height: 1.4; word-wrap: break-word; overflow-wrap: break-word;">{{ message.text }}</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            {% else %}
+                                <div class="d-flex justify-content-start w-100">
+                                    <div class="message-bubble ai-message" style="max-width: 85%;">
+                                        <div class="bg-white border rounded-3 p-3 shadow-sm">
+                                            <div class="d-flex align-items-center mb-2">
+                                                <div class="bg-primary bg-opacity-10 rounded-circle p-1 me-2">
+                                                    <i class="fas fa-robot text-primary" style="font-size: 0.8em;"></i>
+                                                </div>
+                                                <strong class="small">AI Assistant</strong>
+                                                <small class="ms-auto text-muted">{{ message.created_at|date:"H:i" }}</small>
+                                            </div>
+                                            <div style="white-space: pre-wrap; line-height: 1.4; word-wrap: break-word; overflow-wrap: break-word;">{{ message.text }}</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                {% empty %}
+                    <div class="text-center text-muted py-5 h-100 d-flex flex-column justify-content-center align-items-center">
+                        <div class="mb-4">
+                            <i class="fas fa-comments fa-3x text-primary opacity-50"></i>
+                        </div>
+                        <h5 class="mb-2">Welcome to AI Chat!</h5>
+                        <p class="mb-3">Start a conversation by typing a message below.</p>
+                        <div class="d-flex gap-2 flex-wrap justify-content-center">
+                            <span class="badge bg-light text-dark">Model: {{ user_settings.preferred_model }}</span>
+                            <span class="badge bg-light text-dark">RAG: Enabled</span>
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+            
+            <!-- Message Input -->
+            <div class="p-3 border-top bg-white">
+                <form method="post" action="{% url 'chat:chat_view' conversation.id %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="selected_model" id="selected-model" value="{{ user_settings.preferred_model }}">
+                    <input type="hidden" name="temp_instruction" id="temp-instruction" value="">
+                    
+                    <div class="input-group">
+                        <input type="text" 
+                               name="message" 
+                               class="form-control form-control-lg" 
+                               placeholder="Type your message here..." 
+                               autofocus
+                               required>
+                        <button type="submit" class="btn btn-primary btn-lg px-4">
+                            <i class="fas fa-paper-plane"></i>
+                        </button>
+                    </div>
+                </form>
+                
+                <!-- Quick Actions -->
+                <div class="d-flex justify-content-between align-items-center mt-2">
+                    <small class="text-muted">
+                        <i class="fas fa-info-circle"></i>
+                        Press Enter to send, Shift+Enter for new line
+                    </small>
+                    <div class="d-flex gap-2">
+                        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="clearChat()">
+                            <i class="fas fa-broom"></i> Clear
+                        </button>
+                        <a href="{% url 'chat:user_settings' %}" class="btn btn-sm btn-outline-primary">
+                            <i class="fas fa-cog"></i> Settings
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let chatSocket = null;
+let isTyping = false;
+let selectedModel = "{{ user_settings.preferred_model }}";
+let tempInstruction = "";
+
+// Model Selection
+function updateSelectedModel(modelName) {
+    selectedModel = modelName;
+    document.getElementById('selected-model').value = modelName;
+    document.getElementById('current-model').textContent = modelName;
+    
+    // Show toast notification
+    showToast('Model changed to ' + modelName, 'info');
+}
+
+// System Instruction Management  
+function applyTempInstruction() {
+    const instruction = document.getElementById('temp-system-instruction').value.trim();
+    tempInstruction = instruction;
+    document.getElementById('temp-instruction').value = instruction;
+    
+    if (instruction) {
+        showToast('Custom instruction applied for this conversation', 'success');
+    } else {
+        showToast('Using default system instruction', 'info');
+    }
+}
+
+function clearTempInstruction() {
+    document.getElementById('temp-system-instruction').value = '';
+    tempInstruction = '';
+    document.getElementById('temp-instruction').value = '';
+    showToast('Custom instruction cleared', 'info');
+}
+
+// Toast Notifications
+function showToast(message, type = 'info') {
+    const toastContainer = document.getElementById('toast-container') || createToastContainer();
+    const toast = document.createElement('div');
+    toast.className = `toast align-items-center text-white bg-${type === 'info' ? 'primary' : type === 'success' ? 'success' : 'danger'} border-0`;
+    toast.setAttribute('role', 'alert');
+    toast.innerHTML = `
+        <div class="d-flex">
+            <div class="toast-body">${message}</div>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+        </div>
+    `;
+    
+    toastContainer.appendChild(toast);
+    const bsToast = new bootstrap.Toast(toast);
+    bsToast.show();
+    
+    // Remove toast element after it's hidden
+    toast.addEventListener('hidden.bs.toast', () => toast.remove());
+}
+
+function createToastContainer() {
+    const container = document.createElement('div');
+    container.id = 'toast-container';
+    container.className = 'toast-container position-fixed bottom-0 end-0 p-3';
+    container.style.zIndex = '1050';
+    document.body.appendChild(container);
+    return container;
+}
+
+// Clear Chat
+function clearChat() {
+    if (confirm('Are you sure you want to clear this conversation? This cannot be undone.')) {
+        // This would need backend implementation
+        showToast('Chat clearing feature coming soon!', 'info');
+    }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    const chatMessages = document.getElementById('chat-messages');
+    const messageForm = document.querySelector('form');
+    const messageInput = document.querySelector('input[name="message"]');
+    const conversationId = {{ conversation.id }};
+    
+    // Auto-scroll to bottom of chat messages
+    function scrollToBottom() {
+        if (chatMessages) {
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+    }
+    
+    // Initial scroll
+    scrollToBottom();
+    
+    // Model selector handlers
+    document.querySelectorAll('.model-selector').forEach(selector => {
+        selector.addEventListener('click', function(e) {
+            e.preventDefault();
+            const modelName = this.getAttribute('data-model');
+            updateSelectedModel(modelName);
+        });
+    });
+    
+    // Keyboard shortcuts
+    messageInput.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            messageForm.dispatchEvent(new Event('submit'));
+        }
+    });
+    
+    // WebSocket connection
+    const wsScheme = window.location.protocol === "https:" ? "wss" : "ws";
+    const wsPath = wsScheme + '://' + window.location.host + '/ws/chat/' + conversationId + '/';
+    
+    chatSocket = new WebSocket(wsPath);
+    
+    chatSocket.onmessage = function(e) {
+        const data = JSON.parse(e.data);
+        
+        if (data.type === 'chat_message') {
+            addMessage(data.message, data.is_from_user, data.timestamp);
+            scrollToBottom();
+        } else if (data.type === 'typing_indicator') {
+            toggleTypingIndicator(data.is_typing);
+        } else if (data.type === 'error_message') {
+            addErrorMessage(data.message);
+            scrollToBottom();
+        }
+    };
+    
+    chatSocket.onclose = function(e) {
+        console.error('Chat socket closed unexpectedly');
+    };
+    
+    // Handle form submission
+    if (messageForm) {
+        messageForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const message = messageInput.value.trim();
+            if (message && chatSocket.readyState === WebSocket.OPEN) {
+                chatSocket.send(JSON.stringify({
+                    'type': 'chat_message',
+                    'message': message,
+                    'selected_model': selectedModel,
+                    'temp_instruction': tempInstruction
+                }));
+                messageInput.value = '';
+            }
+        });
+    }
+    
+    function addMessage(text, isFromUser, timestamp) {
+        const messageDiv = document.createElement('div');
+        messageDiv.className = 'mb-3';
+        
+        const time = new Date(timestamp).toLocaleTimeString('en-US', {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false
+        });
+        
+        if (isFromUser) {
+            messageDiv.innerHTML = `
+                <div class="d-flex align-items-start">
+                    <div class="d-flex justify-content-end w-100">
+                        <div class="message-bubble user-message" style="max-width: 85%;">
+                            <div class="bg-primary text-white rounded-3 p-3 shadow-sm">
+                                <div class="d-flex align-items-center mb-2">
+                                    <div class="bg-white bg-opacity-25 rounded-circle p-1 me-2">
+                                        <i class="fas fa-user text-white" style="font-size: 0.8em;"></i>
+                                    </div>
+                                    <strong class="small">You</strong>
+                                    <small class="ms-auto text-white-50">${time}</small>
+                                </div>
+                                <div style="white-space: pre-wrap; line-height: 1.4; word-wrap: break-word; overflow-wrap: break-word;">${escapeHtml(text)}</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        } else {
+            messageDiv.innerHTML = `
+                <div class="d-flex align-items-start">
+                    <div class="d-flex justify-content-start w-100">
+                        <div class="message-bubble ai-message" style="max-width: 85%;">
+                            <div class="bg-white border rounded-3 p-3 shadow-sm">
+                                <div class="d-flex align-items-center mb-2">
+                                    <div class="bg-primary bg-opacity-10 rounded-circle p-1 me-2">
+                                        <i class="fas fa-robot text-primary" style="font-size: 0.8em;"></i>
+                                    </div>
+                                    <strong class="small">AI Assistant</strong>
+                                    <small class="ms-auto text-muted">${time}</small>
+                                </div>
+                                <div style="white-space: pre-wrap; line-height: 1.4; word-wrap: break-word; overflow-wrap: break-word;">${escapeHtml(text)}</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+        
+        chatMessages.appendChild(messageDiv);
+    }
+    
+    function addErrorMessage(text) {
+        const messageDiv = document.createElement('div');
+        messageDiv.className = 'mb-3';
+        messageDiv.innerHTML = `
+            <div class="d-flex align-items-start">
+                <div class="me-auto">
+                    <div class="bg-danger text-white rounded p-2" style="max-width: 70%;">
+                        <strong>Error:</strong>
+                        <div>${escapeHtml(text)}</div>
+                    </div>
+                </div>
+            </div>
+        `;
+        chatMessages.appendChild(messageDiv);
+    }
+    
+    function toggleTypingIndicator(typing) {
+        const existingIndicator = document.getElementById('typing-indicator');
+        
+        if (typing && !existingIndicator) {
+            const indicatorDiv = document.createElement('div');
+            indicatorDiv.id = 'typing-indicator';
+            indicatorDiv.className = 'mb-3';
+            indicatorDiv.innerHTML = `
+                <div class="d-flex align-items-start">
+                    <div class="me-auto">
+                        <div class="bg-light border rounded p-2">
+                            <small class="text-muted">
+                                <i class="fas fa-circle-notch fa-spin"></i> AI is typing...
+                            </small>
+                        </div>
+                    </div>
+                </div>
+            `;
+            chatMessages.appendChild(indicatorDiv);
+            scrollToBottom();
+        } else if (!typing && existingIndicator) {
+            existingIndicator.remove();
+        }
+    }
+    
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+});
+
+// Add hover effect for delete buttons
+document.addEventListener('DOMContentLoaded', function() {
+    const deleteButtons = document.querySelectorAll('.btn-hover-danger');
+    deleteButtons.forEach(button => {
+        button.addEventListener('mouseenter', function() {
+            this.classList.add('btn-danger');
+            this.classList.remove('btn-outline-light', 'btn-outline-secondary');
+        });
+        button.addEventListener('mouseleave', function() {
+            this.classList.remove('btn-danger');
+            const isActive = this.closest('.active') !== null;
+            this.classList.add(isActive ? 'btn-outline-light' : 'btn-outline-secondary');
+        });
+    });
+});
+</script>
+{% endblock %}

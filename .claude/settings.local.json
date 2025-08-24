@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:127.0.0.1)",
+      "Bash(./start_app.sh:*)",
+      "Bash(curl:*)",
+      "Bash(lsof:*)",
+      "Bash(redis-cli:*)",
+      "Bash(pgrep:*)",
+      "Bash(ollama list:*)",
+      "Bash(python test:*)",
+      "Bash(source:*)",
+      "Bash(python:*)",
+      "Bash(celery:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

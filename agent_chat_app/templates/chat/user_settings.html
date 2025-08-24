@@ -1,0 +1,208 @@
+{% extends "base.html" %}
+
+{% block title %}Chat Settings{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <div>
+                    <h1 class="mb-0">
+                        <i class="fas fa-cog text-primary"></i>
+                        Chat Settings
+                    </h1>
+                    <p class="text-muted mb-0">Customize your AI chat experience</p>
+                </div>
+                <a href="{% url 'chat:chat_start' %}" class="btn btn-outline-primary">
+                    <i class="fas fa-arrow-left"></i> Back to Chat
+                </a>
+            </div>
+            
+            <!-- Messages -->
+            {% if messages %}
+                {% for message in messages %}
+                <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+                {% endfor %}
+            {% endif %}
+            
+            <div class="row">
+                <!-- Settings Form -->
+                <div class="col-md-8">
+                    <div class="card shadow-sm">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0">
+                                <i class="fas fa-sliders-h"></i>
+                                AI Configuration
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <form method="post">
+                                {% csrf_token %}
+                                
+                                <!-- Model Selection -->
+                                <div class="mb-4">
+                                    <label for="{{ form.preferred_model.id_for_label }}" class="form-label">
+                                        <i class="fas fa-robot"></i>
+                                        {{ form.preferred_model.label }}
+                                    </label>
+                                    {{ form.preferred_model }}
+                                    <div class="form-text">{{ form.preferred_model.help_text }}</div>
+                                    {% if form.preferred_model.errors %}
+                                        <div class="invalid-feedback d-block">{{ form.preferred_model.errors|first }}</div>
+                                    {% endif %}
+                                </div>
+                                
+                                <!-- System Instruction -->
+                                <div class="mb-4">
+                                    <label for="{{ form.system_instruction.id_for_label }}" class="form-label">
+                                        <i class="fas fa-file-alt"></i>
+                                        {{ form.system_instruction.label }}
+                                    </label>
+                                    {{ form.system_instruction }}
+                                    <div class="form-text">{{ form.system_instruction.help_text }}</div>
+                                    {% if form.system_instruction.errors %}
+                                        <div class="invalid-feedback d-block">{{ form.system_instruction.errors|first }}</div>
+                                    {% endif %}
+                                </div>
+                                
+                                <!-- Advanced Settings -->
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <div class="mb-3">
+                                            <label for="{{ form.max_tokens.id_for_label }}" class="form-label">
+                                                <i class="fas fa-text-width"></i>
+                                                {{ form.max_tokens.label }}
+                                            </label>
+                                            {{ form.max_tokens }}
+                                            <div class="form-text">{{ form.max_tokens.help_text }}</div>
+                                            {% if form.max_tokens.errors %}
+                                                <div class="invalid-feedback d-block">{{ form.max_tokens.errors|first }}</div>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="mb-3">
+                                            <label for="{{ form.temperature.id_for_label }}" class="form-label">
+                                                <i class="fas fa-thermometer-half"></i>
+                                                {{ form.temperature.label }}
+                                            </label>
+                                            {{ form.temperature }}
+                                            <div class="form-text">{{ form.temperature.help_text }}</div>
+                                            {% if form.temperature.errors %}
+                                                <div class="invalid-feedback d-block">{{ form.temperature.errors|first }}</div>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="d-flex justify-content-between">
+                                    <button type="submit" class="btn btn-primary">
+                                        <i class="fas fa-save"></i> Save Settings
+                                    </button>
+                                    <button type="button" class="btn btn-outline-secondary" onclick="resetToDefaults()">
+                                        <i class="fas fa-undo"></i> Reset to Defaults
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Information Panel -->
+                <div class="col-md-4">
+                    <div class="card shadow-sm">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0">
+                                <i class="fas fa-info-circle"></i>
+                                Available Models
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="small">
+                                {% for model in available_models %}
+                                <div class="d-flex justify-content-between align-items-center mb-2 p-2 rounded bg-light">
+                                    <div>
+                                        <strong>{{ model.display_name }}</strong>
+                                        <br>
+                                        <small class="text-muted">{{ model.name }}</small>
+                                    </div>
+                                    <span class="badge bg-secondary">{{ model.size_human }}</span>
+                                </div>
+                                {% empty %}
+                                <div class="text-center py-3">
+                                    <i class="fas fa-exclamation-triangle text-warning"></i>
+                                    <p class="mb-0 small text-muted">No models available</p>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Help Panel -->
+                    <div class="card shadow-sm mt-3">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0">
+                                <i class="fas fa-question-circle"></i>
+                                Help
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="small">
+                                <div class="mb-3">
+                                    <strong>Model:</strong>
+                                    <p class="mb-0 text-muted">Choose which AI model to use. Larger models are more capable but slower.</p>
+                                </div>
+                                <div class="mb-3">
+                                    <strong>System Instruction:</strong>
+                                    <p class="mb-0 text-muted">Set how the AI should behave and respond. This affects all conversations.</p>
+                                </div>
+                                <div class="mb-3">
+                                    <strong>Max Tokens:</strong>
+                                    <p class="mb-0 text-muted">Maximum length of AI responses. Higher values allow longer responses but take more time.</p>
+                                </div>
+                                <div class="mb-0">
+                                    <strong>Temperature:</strong>
+                                    <p class="mb-0 text-muted">Controls creativity. Lower values (0.1) = more focused, Higher values (0.9) = more creative.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function resetToDefaults() {
+    if (confirm('Reset all settings to default values? This cannot be undone.')) {
+        document.getElementById('id_preferred_model').value = 'gemma2:2b';
+        document.getElementById('id_system_instruction').value = 'You are a helpful AI assistant. Be concise and accurate in your responses.';
+        document.getElementById('id_max_tokens').value = '2048';
+        document.getElementById('id_temperature').value = '0.7';
+    }
+}
+
+// Auto-save indication
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.querySelector('form');
+    const inputs = form.querySelectorAll('input, textarea, select');
+    
+    inputs.forEach(input => {
+        input.addEventListener('change', function() {
+            // Add visual indication that settings have changed
+            const saveBtn = document.querySelector('button[type="submit"]');
+            if (!saveBtn.classList.contains('btn-warning')) {
+                saveBtn.classList.remove('btn-primary');
+                saveBtn.classList.add('btn-warning');
+                saveBtn.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Save Changes';
+            }
+        });
+    });
+});
+</script>
+{% endblock %}
