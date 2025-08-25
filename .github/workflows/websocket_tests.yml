@@ -1,0 +1,853 @@
+name: WebSocket Tests
+# GitHub Actions workflow for automated WebSocket testing and CI/CD integration.
+# This workflow provides comprehensive WebSocket testing with security scanning,
+# performance regression testing, and automated test execution.
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'agent_chat_app/chat/consumers.py'
+      - 'agent_chat_app/logviewer/consumers.py'
+      - 'agent_chat_app/receipts/consumers.py'
+      - 'config/websocket.py'
+      - 'tests/test_websocket_*.py'
+      - 'utils/websocket_load_tester.py'
+      - 'requirements/*.txt'
+      - '.github/workflows/websocket_tests.yml'
+
+  pull_request:
+    branches: [ main, develop ]
+    paths:
+      - 'agent_chat_app/chat/consumers.py'
+      - 'agent_chat_app/logviewer/consumers.py'
+      - 'agent_chat_app/receipts/consumers.py'
+      - 'config/websocket.py'
+      - 'tests/test_websocket_*.py'
+      - 'utils/websocket_load_tester.py'
+      - 'requirements/*.txt'
+      - '.github/workflows/websocket_tests.yml'
+
+  schedule:
+    # Run comprehensive tests weekly
+    - cron: '0 2 * * 1'  # Monday 2 AM UTC
+
+  workflow_dispatch:
+    inputs:
+      test_type:
+        description: 'Type of tests to run'
+        required: true
+        default: 'comprehensive'
+        type: choice
+        options:
+          - quick
+          - comprehensive
+          - security
+          - performance
+          - load
+      environment:
+        description: 'Environment to test against'
+        required: false
+        default: 'test'
+        type: choice
+        options:
+          - test
+          - staging
+
+env:
+  PYTHON_VERSION: '3.11'
+  NODE_VERSION: '18'
+  REDIS_VERSION: '7'
+  POSTGRES_VERSION: '15'
+
+jobs:
+  websocket-unit-tests:
+    name: WebSocket Unit Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      redis:
+        image: redis:${{ env.REDIS_VERSION }}
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      postgres:
+        image: postgres:${{ env.POSTGRES_VERSION }}
+        env:
+          POSTGRES_DB: websocket_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            postgresql-client \
+            redis-tools \
+            libpq-dev \
+            build-essential
+
+      - name: Cache pip dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements/*.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements/base.txt
+          pip install -r requirements/local.txt
+          pip install -r requirements/local_sqlite.txt
+          pip install pytest pytest-asyncio pytest-django pytest-cov
+          pip install channels[daphne] channels-redis
+          pip install psutil locust
+
+      - name: Set up Django
+        run: |
+          python manage.py collectstatic --noinput
+          python manage.py migrate
+
+      - name: Run WebSocket Unit Tests
+        run: |
+          python -m pytest tests/test_websocket_*.py \
+            --verbose \
+            --cov=agent_chat_app.chat.consumers \
+            --cov=agent_chat_app.logviewer.consumers \
+            --cov=agent_chat_app.receipts.consumers \
+            --cov-report=xml \
+            --cov-report=term-missing \
+            --asyncio-mode=auto
+
+      - name: Upload coverage reports
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./coverage.xml
+          flags: websocket-unit-tests
+          name: websocket-unit-tests
+          fail_ci_if_error: false
+
+  websocket-security-tests:
+    name: WebSocket Security Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      redis:
+        image: redis:${{ env.REDIS_VERSION }}
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements/base.txt
+          pip install -r requirements/local.txt
+          pip install -r requirements/local_sqlite.txt
+          pip install pytest pytest-asyncio pytest-django
+          pip install channels[daphne] channels-redis
+          pip install bandit safety
+
+      - name: Run Security Tests
+        run: |
+          python -m pytest tests/test_websocket_security.py \
+            --verbose \
+            --asyncio-mode=auto \
+            -k "security"
+
+      - name: Run Static Security Analysis
+        run: |
+          # Bandit security analysis for WebSocket consumers
+          bandit -r agent_chat_app/chat/consumers.py \
+                  agent_chat_app/logviewer/consumers.py \
+                  agent_chat_app/receipts/consumers.py \
+                  -f json -o bandit_report.json || true
+
+          # Check for common security issues
+          python -c "
+          import json
+          try:
+              with open('bandit_report.json') as f:
+                  report = json.load(f)
+              issues = report.get('results', [])
+              high_severity = [i for i in issues if i.get('issue_severity') == 'HIGH']
+              if high_severity:
+                  print(f'Found {len(high_severity)} high severity security issues')
+                  for issue in high_severity:
+                      print(f'- {issue.get(\"issue_text\", \"Unknown issue\")}')
+              else:
+                  print('No high severity security issues found')
+          except FileNotFoundError:
+              print('Bandit report not found')
+          "
+
+      - name: Check Dependencies for Vulnerabilities
+        run: |
+          safety check --full-report
+
+      - name: Upload security artifacts
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: security-reports
+          path: |
+            bandit_report.json
+
+  websocket-performance-tests:
+    name: WebSocket Performance Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    services:
+      redis:
+        image: redis:${{ env.REDIS_VERSION }}
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements/base.txt
+          pip install -r requirements/local.txt
+          pip install -r requirements/local_sqlite.txt
+          pip install pytest pytest-asyncio pytest-django
+          pip install channels[daphne] channels-redis
+          pip install psutil locust
+
+      - name: Run Performance Tests
+        run: |
+          python -m pytest tests/test_websocket_performance.py \
+            --verbose \
+            --asyncio-mode=auto \
+            -k "performance"
+
+      - name: Run Basic Load Test
+        run: |
+          python -c "
+          import asyncio
+          from utils.websocket_load_tester import LoadTestRunner
+
+          async def run_test():
+              results = await LoadTestRunner.run_basic_load_test(10, 15)
+              print(f'Load test results:')
+              print(f'- Success rate: {results.connection_success_rate:.2%}')
+              print(f'- Messages sent: {results.total_messages_sent}')
+              print(f'- Peak memory: {results.peak_memory_usage:.1f} MB')
+              print(f'- Avg latency: {results.avg_message_latency:.3f} s')
+
+              # Save results for regression tracking
+              with open('load_test_results.json', 'w') as f:
+                  import json
+                  json.dump({
+                      'success_rate': results.connection_success_rate,
+                      'messages_sent': results.total_messages_sent,
+                      'peak_memory': results.peak_memory_usage,
+                      'avg_latency': results.avg_message_latency
+                  }, f, indent=2)
+
+          asyncio.run(run_test())
+          "
+
+      - name: Upload performance artifacts
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: performance-results
+          path: |
+            load_test_results.json
+
+  websocket-load-tests:
+    name: WebSocket Load Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    services:
+      redis:
+        image: redis:${{ env.REDIS_VERSION }}
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements/base.txt
+          pip install -r requirements/local.txt
+          pip install -r requirements/local_sqlite.txt
+          pip install channels[daphne] channels-redis
+          pip install psutil locust
+
+      - name: Run Comprehensive Load Test
+        run: |
+          python -c "
+          import asyncio
+          from utils.websocket_load_tester import LoadTestRunner
+
+          async def run_comprehensive_test():
+              print('Running comprehensive load test...')
+
+              # Run different load scenarios
+              scenarios = [
+                  ('Basic Load', LoadTestRunner.run_basic_load_test(20, 20)),
+                  ('Rate Limiting', LoadTestRunner.run_rate_limiting_test()),
+              ]
+
+              results = {}
+              for name, test_coro in scenarios:
+                  print(f'Running {name}...')
+                  try:
+                      result = await test_coro
+                      results[name.lower().replace(' ', '_')] = result
+                      print(f'{name} completed successfully')
+                  except Exception as e:
+                      print(f'{name} failed: {e}')
+                      results[name.lower().replace(' ', '_')] = {'error': str(e)}
+
+              # Save comprehensive results
+              import json
+              with open('comprehensive_load_results.json', 'w') as f:
+                  json.dump(results, f, indent=2, default=str)
+
+              print('Comprehensive load test completed!')
+
+          asyncio.run(run_comprehensive_test())
+          "
+
+      - name: Generate Load Test Report
+        run: |
+          python -c "
+          import json
+
+          try:
+              with open('comprehensive_load_results.json') as f:
+                  results = json.load(f)
+
+              print('# Load Test Summary Report')
+              print('=' * 50)
+
+              for scenario, data in results.items():
+                  print(f'\\n## {scenario.replace(\"_\", \" \").title()}')
+
+                  if 'error' in data:
+                      print(f'❌ Failed: {data[\"error\"]}')
+                  elif 'basic_load' in scenario:
+                      success_rate = data.get('connection_success_rate', 0)
+                      messages = data.get('total_messages_sent', 0)
+                      memory = data.get('peak_memory_usage', 0)
+                      latency = data.get('avg_message_latency', 0)
+
+                      print(f'✅ Success rate: {success_rate:.1%}')
+                      print(f'📊 Messages sent: {messages}')
+                      print(f'🧠 Peak memory: {memory:.1f} MB')
+                      print(f'⚡ Avg latency: {latency:.3f} s')
+
+                      # Performance thresholds
+                      if success_rate >= 0.95:
+                          print('🎯 Performance: Excellent')
+                      elif success_rate >= 0.85:
+                          print('⚠️  Performance: Good')
+                      else:
+                          print('❌ Performance: Needs attention')
+
+                  elif 'rate_limiting' in scenario:
+                      print('Rate limiting test completed')
+
+          except FileNotFoundError:
+              print('Load test results not found')
+          "
+
+      - name: Upload load test artifacts
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: load-test-results
+          path: |
+            comprehensive_load_results.json
+
+  websocket-browser-tests:
+    name: WebSocket Browser Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements/base.txt
+          pip install -r requirements/local.txt
+          pip install -r requirements/local_sqlite.txt
+          pip install channels[daphne] channels-redis selenium
+
+      - name: Install Node.js dependencies
+        run: |
+          npm install -g playwright
+          playwright install
+
+      - name: Set up Django and start server
+        run: |
+          python manage.py collectstatic --noinput
+          python manage.py migrate &
+          sleep 5
+
+          # Start Daphne server in background
+          daphne config.asgi:application --bind 0.0.0.0 --port 8000 &
+          sleep 10
+
+      - name: Run Browser WebSocket Tests
+        run: |
+          python -c "
+          from selenium import webdriver
+          from selenium.webdriver.chrome.options import Options
+          from selenium.webdriver.common.by import By
+          from selenium.webdriver.support.ui import WebDriverWait
+          from selenium.webdriver.support import expected_conditions as EC
+          import time
+          import json
+
+          # Set up headless Chrome
+          chrome_options = Options()
+          chrome_options.add_argument('--headless')
+          chrome_options.add_argument('--no-sandbox')
+          chrome_options.add_argument('--disable-dev-shm-usage')
+
+          driver = webdriver.Chrome(options=chrome_options)
+
+          try:
+              # Navigate to a page that establishes WebSocket connection
+              driver.get('http://localhost:8000/chat/')  # Adjust URL as needed
+
+              # Wait for page to load
+              WebDriverWait(driver, 10).until(
+                  EC.presence_of_element_located((By.TAG_NAME, 'body'))
+              )
+
+              # Check browser console for WebSocket errors
+              logs = driver.get_log('browser')
+              websocket_errors = [log for log in logs if 'WebSocket' in log.get('message', '')]
+
+              print(f'Browser WebSocket test completed')
+              print(f'Found {len(websocket_errors)} WebSocket-related browser logs')
+
+              for error in websocket_errors[:5]:  # Show first 5 errors
+                  print(f'- {error.get(\"message\", \"\")}')
+
+              # Save results
+              with open('browser_test_results.json', 'w') as f:
+                  json.dump({
+                      'websocket_errors': len(websocket_errors),
+                      'total_logs': len(logs),
+                      'test_passed': len(websocket_errors) == 0
+                  }, f, indent=2)
+
+          finally:
+              driver.quit()
+          "
+
+      - name: Upload browser test artifacts
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: browser-test-results
+          path: |
+            browser_test_results.json
+
+  performance-regression-check:
+    name: Performance Regression Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements/base.txt
+          pip install -r requirements/local.txt
+          pip install -r requirements/local_sqlite.txt
+          pip install channels[daphne] channels-redis
+          pip install psutil
+
+      - name: Download baseline metrics
+        uses: actions/download-artifact@v3
+        with:
+          name: performance-baseline
+          path: ./baseline/
+
+      - name: Run current performance tests
+        run: |
+          python -c "
+          import asyncio
+          import json
+          from utils.websocket_load_tester import LoadTestRunner
+
+          async def run_baseline_comparison():
+              print('Running performance baseline comparison...')
+
+              # Run current performance test
+              results = await LoadTestRunner.run_basic_load_test(15, 20)
+
+              current_metrics = {
+                  'success_rate': results.connection_success_rate,
+                  'messages_per_second': results.overall_messages_per_second,
+                  'avg_latency': results.avg_message_latency,
+                  'peak_memory': results.peak_memory_usage
+              }
+
+              # Try to load baseline metrics
+              baseline_metrics = {}
+              try:
+                  with open('baseline/metrics.json') as f:
+                      baseline_metrics = json.load(f)
+                  print('Loaded baseline metrics')
+              except FileNotFoundError:
+                  print('No baseline metrics found, creating new baseline')
+                  baseline_metrics = current_metrics
+
+              # Compare metrics
+              regressions = {}
+              for metric, current_value in current_metrics.items():
+                  if metric in baseline_metrics:
+                      baseline_value = baseline_metrics[metric]
+
+                      # Define acceptable degradation thresholds
+                      thresholds = {
+                          'success_rate': 0.05,  # 5% degradation allowed
+                          'messages_per_second': 0.20,  # 20% degradation allowed
+                          'avg_latency': 0.50,  # 50% increase allowed
+                          'peak_memory': 0.30   # 30% increase allowed
+                      }
+
+                      threshold = thresholds.get(metric, 0.10)  # Default 10%
+
+                      if metric in ['success_rate', 'messages_per_second']:
+                          # Lower is worse for these metrics
+                          if current_value < baseline_value * (1 - threshold):
+                              regressions[metric] = {
+                                  'baseline': baseline_value,
+                                  'current': current_value,
+                                  'degradation': (baseline_value - current_value) / baseline_value
+                              }
+                      else:
+                          # Higher is worse for these metrics
+                          if current_value > baseline_value * (1 + threshold):
+                              regressions[metric] = {
+                                  'baseline': baseline_value,
+                                  'current': current_value,
+                                  'degradation': (current_value - baseline_value) / baseline_value
+                              }
+
+              # Save comparison results
+              with open('regression_results.json', 'w') as f:
+                  json.dump({
+                      'current_metrics': current_metrics,
+                      'baseline_metrics': baseline_metrics,
+                      'regressions': regressions
+                  }, f, indent=2)
+
+              # Report results
+              if regressions:
+                  print(f'⚠️  Found {len(regressions)} performance regressions:')
+                  for metric, data in regressions.items():
+                      print(f'  - {metric}: {data[\"baseline\"]:.3f} → {data[\"current\"]:.3f} ({data[\"degradation\"]:.1%})')
+              else:
+                  print('✅ No significant performance regressions detected')
+
+              return regressions
+
+          regressions = asyncio.run(run_baseline_comparison())
+
+          # Set exit code based on regressions
+          if regressions:
+              exit(1)  # Fail the job if regressions found
+          "
+
+      - name: Upload regression results
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: regression-results
+          path: |
+            regression_results.json
+
+  comprehensive-summary:
+    name: Comprehensive Test Summary
+    runs-on: ubuntu-latest
+    needs: [
+      websocket-unit-tests,
+      websocket-security-tests,
+      websocket-performance-tests,
+      websocket-load-tests,
+      websocket-browser-tests,
+      performance-regression-check
+    ]
+    if: always()
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v3
+
+      - name: Generate comprehensive summary
+        run: |
+          echo "# WebSocket Testing Summary" > summary.md
+          echo "Generated on: $(date)" >> summary.md
+          echo "" >> summary.md
+
+          # Job status summary
+          echo "## Test Results" >> summary.md
+          echo "" >> summary.md
+
+          # Function to check job status
+          check_job_status() {
+            local job_name="$1"
+            local status="$2"
+            local icon="❌"
+
+            if [ "$status" = "success" ]; then
+              icon="✅"
+            elif [ "$status" = "skipped" ]; then
+              icon="⏭️"
+            fi
+
+            echo "- $icon $job_name: $status" >> summary.md
+          }
+
+          # Add job statuses (these would be available as environment variables in a real workflow)
+          echo "| Test Suite | Status | Details |" >> summary.md
+          echo "|------------|--------|---------|" >> summary.md
+
+          # Add performance metrics if available
+          if [ -f "performance-results/load_test_results.json" ]; then
+            echo "" >> summary.md
+            echo "## Performance Metrics" >> summary.md
+            echo "" >> summary.md
+
+            python -c "
+            import json
+            try:
+                with open('performance-results/load_test_results.json') as f:
+                    data = json.load(f)
+                print(f'- **Connection Success Rate**: {data.get(\"success_rate\", 0):.1%}')
+                print(f'- **Messages Sent**: {data.get(\"messages_sent\", 0)}')
+                print(f'- **Peak Memory Usage**: {data.get(\"peak_memory\", 0):.1f} MB')
+                print(f'- **Average Latency**: {data.get(\"avg_latency\", 0):.3f} s')
+            except Exception as e:
+                print(f'Error reading performance data: {e}')
+            " >> summary.md
+          fi
+
+          # Add security findings if available
+          if [ -f "security-reports/bandit_report.json" ]; then
+            echo "" >> summary.md
+            echo "## Security Findings" >> summary.md
+            echo "" >> summary.md
+
+            python -c "
+            import json
+            try:
+                with open('security-reports/bandit_report.json') as f:
+                    data = json.load(f)
+                results = data.get('results', [])
+                high_severity = [r for r in results if r.get('issue_severity') == 'HIGH']
+                print(f'- **Total Issues Found**: {len(results)}')
+                print(f'- **High Severity**: {len(high_severity)}')
+                if high_severity:
+                    print('- **High Severity Issues**:')
+                    for issue in high_severity[:3]:  # Show first 3
+                        print(f'  - {issue.get(\"issue_text\", \"Unknown\")}')
+            except Exception as e:
+                print(f'Error reading security data: {e}')
+            " >> summary.md
+          fi
+
+          # Recommendations
+          echo "" >> summary.md
+          echo "## Recommendations" >> summary.md
+          echo "" >> summary.md
+          echo "- Monitor performance metrics regularly" >> summary.md
+          echo "- Address any security findings promptly" >> summary.md
+          echo "- Review failed tests and fix underlying issues" >> summary.md
+          echo "- Consider performance optimizations if latency increases" >> summary.md
+
+          cat summary.md
+
+      - name: Upload summary
+        uses: actions/upload-artifact@v3
+        with:
+          name: test-summary
+          path: |
+            summary.md
+
+      - name: Comment on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const fs = require('fs');
+
+            try {
+              const summary = fs.readFileSync('summary.md', 'utf8');
+
+              await github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: summary
+              });
+            } catch (error) {
+              console.log('Could not read summary file:', error.message);
+            }
+
+  update-baseline:
+    name: Update Performance Baseline
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    needs: [websocket-performance-tests]
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download performance results
+        uses: actions/download-artifact@v3
+        with:
+          name: performance-results
+          path: ./results/
+
+      - name: Update baseline metrics
+        run: |
+          mkdir -p .github/workflows/baseline
+
+          # Copy current results as new baseline
+          if [ -f "results/load_test_results.json" ]; then
+            cp results/load_test_results.json .github/workflows/baseline/metrics.json
+            echo "Updated performance baseline metrics"
+          else
+            echo "Performance results not found, skipping baseline update"
+          fi
+
+      - name: Commit baseline update
+        run: |
+          if [ -f ".github/workflows/baseline/metrics.json" ]; then
+            git config --local user.email "action@github.com"
+            git config --local user.name "GitHub Action"
+
+            git add .github/workflows/baseline/metrics.json
+            git commit -m "Update WebSocket performance baseline metrics
+
+            This commit updates the baseline performance metrics for WebSocket tests.
+            The new baseline will be used for future regression detection." || echo "No changes to commit"
+          fi
+
+      - name: Create Pull Request
+        if: success()
+        uses: peter-evans/create-pull-request@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: Update WebSocket performance baseline
+          title: 'Update WebSocket Performance Baseline'
+          body: |
+            This PR updates the performance baseline metrics for WebSocket tests.
+
+            The baseline metrics are used to detect performance regressions in future commits.
+            The new baseline reflects the current performance characteristics of the WebSocket implementation.
+
+            **Changes:**
+            - Updated performance baseline metrics in `.github/workflows/baseline/metrics.json`
+
+            This PR was automatically created by the WebSocket testing workflow.
+          branch: update-websocket-baseline
+          delete-branch: true
+          draft: false
