@@ -14,6 +14,8 @@ from channels.middleware import BaseMiddleware
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import AnonymousUser
+from django.contrib.sessions.models import Session
+from django.utils import timezone
 from rest_framework.authtoken.models import Token
 
 logger = logging.getLogger(__name__)
@@ -47,8 +49,15 @@ class WebSocketAuthMiddleware(BaseMiddleware):
         
         # First try session authentication (for web users)
         user = scope.get("user")
-        if user and not isinstance(user, AnonymousUser):
+        if user and not isinstance(user, AnonymousUser) and user.is_authenticated:
             logger.info(f"WebSocket authenticated via session: user {user.id}")
+            return scope
+
+        # Try session authentication manually if AuthMiddleware didn't set it
+        user = await self.get_user_from_session(scope)
+        if user and not isinstance(user, AnonymousUser):
+            scope["user"] = user
+            logger.info(f"WebSocket authenticated via manual session: user {user.id}")
             return scope
 
         # Try token authentication from query parameters
@@ -85,6 +94,48 @@ class WebSocketAuthMiddleware(BaseMiddleware):
         logger.warning("WebSocket connection without valid authentication")
         scope["user"] = AnonymousUser()
         return scope
+
+    @database_sync_to_async
+    def get_user_from_session(self, scope) -> Optional[User]:
+        """Get user from session cookie."""
+        try:
+            # Get session key from cookies
+            headers = dict(scope.get("headers", []))
+            cookie_header = headers.get(b"cookie")
+            if not cookie_header:
+                return None
+            
+            cookies = {}
+            cookie_string = cookie_header.decode()
+            for cookie in cookie_string.split('; '):
+                if '=' in cookie:
+                    key, value = cookie.split('=', 1)
+                    cookies[key] = value
+            
+            session_key = cookies.get(settings.SESSION_COOKIE_NAME)
+            if not session_key:
+                return None
+            
+            # Get session from database
+            session = Session.objects.get(session_key=session_key)
+            if session.expire_date < timezone.now():
+                return None
+                
+            # Decode session data to get user ID
+            session_data = session.get_decoded()
+            user_id = session_data.get('_auth_user_id')
+            if not user_id:
+                return None
+                
+            # Get user
+            user = User.objects.get(id=user_id)
+            return user
+            
+        except (Session.DoesNotExist, User.DoesNotExist, KeyError, ValueError):
+            return None
+        except Exception as e:
+            logger.error(f"Error getting user from session: {e}")
+            return None
 
     @database_sync_to_async
     def get_user_from_token(self, token_key: str) -> Optional[User]:
