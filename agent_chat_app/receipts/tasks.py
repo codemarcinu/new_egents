@@ -5,9 +5,11 @@ Implements the process_receipt_task from system-paragonow-guide.md
 
 import asyncio
 import logging
+import time
 from decimal import Decimal
 from celery import shared_task
 from django.utils import timezone
+from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
@@ -26,8 +28,13 @@ def process_receipt_task(self, receipt_id):
         from .services.product_matcher import get_product_matcher
         from .services.inventory_service import get_inventory_service, get_websocket_notifier
         from .services.receipt_parser import ParsedProduct
+        from .monitoring import start_monitoring, record_step_timing, complete_monitoring
+        from .error_handling import handle_receipt_error
         
         logger.info(f"Starting receipt processing for receipt {receipt_id}")
+        start_monitoring(receipt_id)
+        start_time = time.time()
+        processing_timeout = getattr(settings, 'RECEIPT_PROCESSING_TIMEOUT', 300)  # 5 minutes default
         
         # Get receipt object
         try:
@@ -44,12 +51,19 @@ def process_receipt_task(self, receipt_id):
         notifier = get_websocket_notifier()
         
         # Step 1: OCR Processing
+        step_start = time.time()
         logger.info(f"Starting OCR for receipt {receipt_id}")
         receipt.mark_as_processing('ocr_in_progress')
         notifier.notify_receipt_status_update(
             receipt_id, 'processing', 'ocr_in_progress',
             'Extracting text from receipt image...'
         )
+        
+        # Check processing timeout
+        if time.time() - start_time > processing_timeout:
+            logger.error(f"Receipt {receipt_id} processing timed out before OCR")
+            receipt.mark_as_error("Processing timed out")
+            return {'status': 'failed', 'error': 'Processing timeout'}
         
         try:
             # Use adaptive OCR service with receipt tracking
@@ -62,20 +76,31 @@ def process_receipt_task(self, receipt_id):
                 
             receipt.mark_ocr_done(raw_text)
             
+            ocr_duration = time.time() - step_start
+            record_step_timing(receipt_id, 'ocr', ocr_duration)
+            logger.info(f"OCR completed for receipt {receipt_id} in {ocr_duration:.2f}s")
+            
             notifier.notify_receipt_status_update(
                 receipt_id, 'processing', 'ocr_completed',
-                'Text extraction completed successfully'
+                f'Text extraction completed in {ocr_duration:.1f}s'
             )
             
-            logger.info(f"OCR completed for receipt {receipt_id}")
-            
         except Exception as e:
-            logger.error(f"OCR failed for receipt {receipt_id}: {e}")
+            error_info = handle_receipt_error(receipt_id, e, {'step': 'ocr', 'duration': time.time() - step_start})
             receipt.mark_as_error(f"OCR processing failed: {str(e)}")
-            return {'status': 'failed', 'error': f'OCR failed: {str(e)}'}
+            complete_monitoring(receipt_id, False, f"OCR failed: {str(e)}")
+            return {'status': 'failed', 'error': f'OCR failed: {str(e)}', 'error_info': error_info}
         
         # Step 2: LLM Parsing
+        step_start = time.time()
         logger.info(f"Starting parsing for receipt {receipt_id}")
+        
+        # Check processing timeout
+        if time.time() - start_time > processing_timeout:
+            logger.error(f"Receipt {receipt_id} processing timed out before parsing")
+            receipt.mark_as_error("Processing timed out")
+            return {'status': 'failed', 'error': 'Processing timeout'}
+            
         receipt.mark_llm_processing()
         notifier.notify_receipt_status_update(
             receipt_id, 'processing', 'parsing_in_progress',
@@ -229,6 +254,7 @@ def process_receipt_task(self, receipt_id):
         
         logger.info(f"Receipt {receipt_id} processing completed successfully")
         
+        complete_monitoring(receipt_id, True)
         return {
             'status': 'completed',
             'receipt_id': receipt_id,
@@ -238,6 +264,7 @@ def process_receipt_task(self, receipt_id):
         
     except Exception as e:
         logger.error(f"Receipt processing failed for {receipt_id}: {e}")
+        error_info = handle_receipt_error(receipt_id, e, {'step': 'general', 'total_duration': time.time() - start_time})
         
         # Try to mark receipt as failed
         try:
@@ -250,18 +277,63 @@ def process_receipt_task(self, receipt_id):
             notifier = get_websocket_notifier()
             notifier.notify_receipt_status_update(
                 receipt_id, 'error', 'failed',
-                f'Processing failed: {str(e)}'
+                error_info.user_message or f'Processing failed: {str(e)}'
             )
             
         except Exception as mark_error_e:
             logger.error(f"Failed to mark receipt as failed: {mark_error_e}")
         
-        # Retry logic
-        if self.request.retries < self.max_retries:
+        complete_monitoring(receipt_id, False, str(e))
+        
+        # Retry logic for recoverable errors
+        if error_info.recoverable and self.request.retries < min(self.max_retries, error_info.max_retries):
             logger.info(f"Retrying receipt processing for {receipt_id} (attempt {self.request.retries + 1})")
             raise self.retry(countdown=60 * (2 ** self.request.retries))
         
-        return {'status': 'failed', 'error': str(e)}
+        return {'status': 'failed', 'error': str(e), 'error_info': error_info}
+
+
+@shared_task(bind=True, max_retries=2)
+def retry_ocr_task(self, receipt_id):
+    """Retry OCR processing with different backend."""
+    try:
+        from .models import Receipt
+        from .services.ocr_service import get_hybrid_ocr_service
+        from .error_handling import handle_receipt_error
+        
+        receipt = Receipt.objects.get(id=receipt_id)
+        ocr_service = get_hybrid_ocr_service()
+        
+        logger.info(f"Retrying OCR for receipt {receipt_id} (attempt {self.request.retries + 1})")
+        
+        # Force use of different OCR backend
+        raw_text = asyncio.run(
+            ocr_service.extract_text_from_file_with_receipt(
+                receipt.receipt_file.path, 
+                receipt,
+                force_backend='fallback'
+            )
+        )
+        
+        if raw_text.strip():
+            receipt.mark_ocr_done(raw_text)
+            logger.info(f"OCR retry successful for receipt {receipt_id}")
+            
+            # Continue with normal processing
+            process_receipt_task.apply_async(args=[receipt_id], countdown=5)
+            return {'status': 'success', 'text_length': len(raw_text)}
+        else:
+            raise ValueError("OCR retry returned empty text")
+            
+    except Exception as e:
+        logger.error(f"OCR retry failed for receipt {receipt_id}: {e}")
+        
+        if self.request.retries < self.max_retries:
+            logger.info(f"Scheduling another OCR retry for receipt {receipt_id}")
+            raise self.retry(countdown=120)  # Retry in 2 minutes
+        else:
+            handle_receipt_error(receipt_id, e, {'step': 'ocr_retry', 'final_attempt': True})
+            return {'status': 'failed', 'error': str(e)}
 
 
 @shared_task

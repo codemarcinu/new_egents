@@ -12,7 +12,6 @@ import os
 import sys
 from pathlib import Path
 
-from channels.auth import AuthMiddlewareStack
 from channels.routing import ProtocolTypeRouter, URLRouter
 from channels.security.websocket import AllowedHostsOriginValidator
 from django.core.asgi import get_asgi_application
@@ -29,14 +28,13 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings.local")
 # is populated before importing code that may import ORM models.
 django_asgi_app = get_asgi_application()
 
-# Import routing after Django is set up
+# Import routing and middleware after Django is set up
 from agent_chat_app.chat import routing  # noqa: E402
+from agent_chat_app.core.middleware import WebSocketAuthMiddlewareStack  # noqa: E402
 
 application = ProtocolTypeRouter(
     {
         "http": django_asgi_app,
-        "websocket": AllowedHostsOriginValidator(
-            AuthMiddlewareStack(URLRouter(routing.websocket_urlpatterns))
-        ),
+        "websocket": WebSocketAuthMiddlewareStack(URLRouter(routing.websocket_urlpatterns)),
     }
 )

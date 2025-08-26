@@ -410,6 +410,44 @@ CELERY_WORKER_SEND_TASK_EVENTS = True
 CELERY_TASK_SEND_SENT_EVENT = True
 # https://docs.celeryq.dev/en/stable/userguide/configuration.html#worker-hijack-root-logger
 CELERY_WORKER_HIJACK_ROOT_LOGGER = False
+
+# Advanced Celery Configuration for Performance and Scaling
+# ------------------------------------------------------------------------------
+# https://docs.celeryq.dev/en/stable/userguide/configuration.html#worker-concurrency
+CELERY_WORKER_CONCURRENCY = env.int("CELERY_WORKER_CONCURRENCY", None)  # Default: number of CPUs
+# https://docs.celeryq.dev/en/stable/userguide/configuration.html#worker-autoscaler
+CELERY_WORKER_AUTOSCALER = env("CELERY_WORKER_AUTOSCALER", default="10,3")  # max,min workers
+# https://docs.celeryq.dev/en/stable/userguide/configuration.html#worker-prefetch-multiplier
+CELERY_WORKER_PREFETCH_MULTIPLIER = env.int("CELERY_WORKER_PREFETCH_MULTIPLIER", default=4)
+# https://docs.celeryq.dev/en/stable/userguide/configuration.html#worker-max-tasks-per-child
+CELERY_WORKER_MAX_TASKS_PER_CHILD = env.int("CELERY_WORKER_MAX_TASKS_PER_CHILD", default=1000)
+# https://docs.celeryq.dev/en/stable/userguide/configuration.html#worker-max-memory-per-child
+CELERY_WORKER_MAX_MEMORY_PER_CHILD = env.int("CELERY_WORKER_MAX_MEMORY_PER_CHILD", default=200000)  # 200MB
+
+# Task routing for different queue priorities
+# https://docs.celeryq.dev/en/stable/userguide/configuration.html#task-routes
+CELERY_TASK_ROUTES = {
+    'agent_chat_app.receipts.tasks.process_receipt_task': {'queue': 'receipt_processing'},
+    'agent_chat_app.chat.tasks.*': {'queue': 'chat_tasks'},
+    'agent_chat_app.users.tasks.*': {'queue': 'user_tasks'},
+}
+
+# Queue configuration with different priorities
+# https://docs.celeryq.dev/en/stable/userguide/configuration.html#std:setting-task_default_queue
+CELERY_TASK_DEFAULT_QUEUE = 'default'
+CELERY_TASK_QUEUES = {
+    'default': {'exchange': 'default', 'routing_key': 'default'},
+    'receipt_processing': {'exchange': 'receipts', 'routing_key': 'receipt.process'},
+    'chat_tasks': {'exchange': 'chat', 'routing_key': 'chat.task'},
+    'user_tasks': {'exchange': 'users', 'routing_key': 'user.task'},
+    'high_priority': {'exchange': 'priority', 'routing_key': 'priority.high'},
+}
+
+# Receipt processing specific settings
+RECEIPT_PROCESSING_TIMEOUT = env.int("RECEIPT_PROCESSING_TIMEOUT", default=300)  # 5 minutes
+SLOW_PROCESSING_THRESHOLD = env.int("SLOW_PROCESSING_THRESHOLD", default=120)  # 2 minutes
+HIGH_FAILURE_RATE_THRESHOLD = env.float("HIGH_FAILURE_RATE_THRESHOLD", default=0.2)  # 20%
+ALERT_COOLDOWN_MINUTES = env.int("ALERT_COOLDOWN_MINUTES", default=30)
 # django-allauth
 # ------------------------------------------------------------------------------
 ACCOUNT_ALLOW_REGISTRATION = env.bool("DJANGO_ACCOUNT_ALLOW_REGISTRATION", True)

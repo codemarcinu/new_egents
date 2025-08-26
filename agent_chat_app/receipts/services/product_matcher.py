@@ -8,6 +8,7 @@ import re
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
 from django.db.models import Q
+from django.core.cache import cache
 from fuzzywuzzy import fuzz, process
 
 logger = logging.getLogger(__name__)
@@ -33,6 +34,7 @@ class ProductMatcher:
     def __init__(self, fuzzy_match_threshold: float = 0.75, auto_create_products: bool = True):
         self.fuzzy_match_threshold = fuzzy_match_threshold
         self.auto_create_products = auto_create_products
+        self.cache_timeout = 3600  # 1 hour cache
     
     def match_product(self, parsed_product, all_parsed_products=None) -> MatchResult:
         """
@@ -48,18 +50,27 @@ class ProductMatcher:
         from ..models import Product, Category
         
         normalized_name = self.normalize_product_name(parsed_product.name)
+        
+        # Check cache first
+        cache_key = f"product_match:{normalized_name}"
+        cached_result = cache.get(cache_key)
+        if cached_result:
+            logger.debug(f"Cache hit for product: {normalized_name}")
+            return cached_result
         logger.debug(f"Matching product: '{parsed_product.name}' -> '{normalized_name}'")
         
         # 1. Exact match by normalized name
         exact_match = self._find_exact_match(normalized_name)
         if exact_match:
             logger.debug(f"Found exact match: {exact_match}")
-            return MatchResult(
+            result = MatchResult(
                 product=exact_match,
                 confidence=1.0,
                 match_type="exact",
                 normalized_name=normalized_name
             )
+            cache.set(cache_key, result, timeout=self.cache_timeout)
+            return result
         
         # 2. Alias match
         alias_match, matched_alias = self._find_alias_match(normalized_name)
@@ -67,13 +78,15 @@ class ProductMatcher:
             logger.debug(f"Found alias match: {alias_match} (alias: {matched_alias})")
             # Update alias usage statistics
             alias_match.add_alias(normalized_name)
-            return MatchResult(
+            result = MatchResult(
                 product=alias_match,
                 confidence=0.9,
                 match_type="alias",
                 normalized_name=normalized_name,
                 matched_alias=matched_alias
             )
+            cache.set(cache_key, result, timeout=self.cache_timeout)
+            return result
         
         # 3. Fuzzy match against product names
         fuzzy_match, similarity = self._find_fuzzy_match(normalized_name)
@@ -81,24 +94,29 @@ class ProductMatcher:
             logger.debug(f"Found fuzzy match: {fuzzy_match} (similarity: {similarity:.2f})")
             # Add as alias for future matching
             fuzzy_match.add_alias(normalized_name)
-            return MatchResult(
+            result = MatchResult(
                 product=fuzzy_match,
                 confidence=similarity,
                 match_type="fuzzy",
                 normalized_name=normalized_name
             )
+            cache.set(cache_key, result, timeout=self.cache_timeout)
+            return result
         
         # 4. Create new "ghost" product if enabled
         if self.auto_create_products:
             ghost_product = self._create_ghost_product(parsed_product, normalized_name)
             logger.debug(f"Created ghost product: {ghost_product}")
-            return MatchResult(
+            result = MatchResult(
                 product=ghost_product,
                 confidence=0.5,
                 match_type="created",
                 normalized_name=normalized_name,
                 category_guess=ghost_product.category
             )
+            # Cache created products for shorter time
+            cache.set(cache_key, result, timeout=self.cache_timeout // 2)
+            return result
         
         # If we can't create products, return None (should not happen in normal flow)
         raise ValueError(f"Could not match product: {parsed_product.name}")

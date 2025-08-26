@@ -200,8 +200,12 @@ class GeneralNotificationConsumer(AsyncWebsocketConsumer):
         """Handle WebSocket connection."""
         self.user = self.scope.get('user')
         
+        logger.info(f"GeneralNotificationConsumer connect: user={self.user}, type={type(self.user)}")
+        logger.info(f"Scope keys: {list(self.scope.keys())}")
+        
         # Check authentication
         if isinstance(self.user, AnonymousUser):
+            logger.warning("Anonymous user attempted to connect to general notifications")
             await self.close()
             return
         
