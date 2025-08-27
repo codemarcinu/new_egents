@@ -1,6 +1,6 @@
 python-slugify==8.0.4  # https://github.com/un33k/python-slugify
 Pillow==11.3.0 # pyup: != 11.2.0  # https://github.com/python-pillow/Pillow
-rcssmin==1.1.2  # https://github.com/ndparker/rcssmin
+rcssmin==1.2.1  # https://github.com/ndparker/rcssmin
 argon2-cffi==25.1.0  # https://github.com/hynek/argon2_cffi
 whitenoise==6.9.0  # https://github.com/evansd/whitenoise
 redis==6.4.0  # https://github.com/redis/redis-py
@@ -31,14 +31,14 @@ drf-spectacular==0.28.0  # https://github.com/tfranzel/drf-spectacular
 # Receipt Processing Dependencies
 # ------------------------------------------------------------------------------
 # OCR libraries
-easyocr==1.7.1  # https://github.com/JaidedAI/EasyOCR
+easyocr==1.7.2  # https://github.com/JaidedAI/EasyOCR
 pytesseract==0.3.13  # https://github.com/madmaze/pytesseract
 paddleocr==2.9.1  # https://github.com/PaddlePaddle/PaddleOCR
-opencv-python==4.10.0.84  # https://github.com/opencv/opencv-python
+opencv-python==4.12.0.88  # https://github.com/opencv/opencv-python
 
 # Fuzzy matching
 fuzzywuzzy==0.18.0  # https://github.com/seatgeek/fuzzywuzzy
-python-levenshtein==0.26.0  # https://github.com/rapidfuzz/python-Levenshtein
+python-levenshtein==0.27.1  # https://github.com/rapidfuzz/python-Levenshtein
 
 # Image processing
 scikit-image==0.24.0  # https://github.com/scikit-image/scikit-image
@@ -47,4 +47,4 @@ scikit-image==0.24.0  # https://github.com/scikit-image/scikit-image
 # google-cloud-vision==3.8.1  # Uncomment if using Google Vision API
 
 # WebSocket support for real-time updates
-channels-redis==4.2.0  # https://github.com/django/channels_redis
+channels-redis==4.3.0  # https://github.com/django/channels_redis
