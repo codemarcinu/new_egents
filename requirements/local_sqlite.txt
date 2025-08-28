@@ -10,7 +10,7 @@ watchfiles==1.1.0  # https://github.com/samuelcolvin/watchfiles
 mypy==1.17.1  # https://github.com/python/mypy
 django-stubs[compatible-mypy]==5.2.2  # https://github.com/typeddjango/django-stubs
 pytest==8.4.1  # https://github.com/pytest-dev/pytest
-pytest-sugar==1.1.0  # https://github.com/Teemu/pytest-sugar
+pytest-sugar==1.1.1  # https://github.com/Teemu/pytest-sugar
 djangorestframework-stubs==3.16.0  # https://github.com/typeddjango/djangorestframework-stubs
 
 # Documentation
@@ -21,13 +21,13 @@ sphinx-autobuild==2024.10.3 # https://github.com/GaretJax/sphinx-autobuild
 # Code quality
 # ------------------------------------------------------------------------------
 ruff==0.12.10  # https://github.com/astral-sh/ruff
-coverage==7.10.4  # https://github.com/nedbat/coveragepy
+coverage==7.10.5  # https://github.com/nedbat/coveragepy
 djlint==1.36.4  # https://github.com/Riverside-Healthcare/djLint
 pre-commit==4.3.0  # https://github.com/pre-commit/pre-commit
 
 # Django
 # ------------------------------------------------------------------------------
-factory-boy==3.3.2  # https://github.com/FactoryBoy/factory_boy
+factory-boy==3.3.3  # https://github.com/FactoryBoy/factory_boy
 
 django-debug-toolbar==6.0.0  # https://github.com/jazzband/django-debug-toolbar
 django-extensions==4.1  # https://github.com/django-extensions/django-extensions
@@ -39,15 +39,15 @@ requests==2.32.5  # For API calls to Ollama
 
 # RAG dependencies
 chromadb==0.5.23  # Vector database for RAG
-langchain==0.3.10  # Document processing
-langchain-community==0.3.10  # Additional document loaders
+langchain==0.3.27  # Document processing
+langchain-community==0.3.29  # Additional document loaders
 pypdf2==3.0.1  # PDF processing
-python-docx==1.1.2  # DOCX processing
+python-docx==1.2.0  # DOCX processing
 openpyxl==3.1.5  # Excel processing
 
 # WebSocket support
-channels==4.1.0  # Django Channels for WebSocket
-channels-redis==4.2.0  # Redis backend for channels
-daphne==4.1.2  # ASGI server for Channels
+channels==4.3.1  # Django Channels for WebSocket
+channels-redis==4.3.0  # Redis backend for channels
+daphne==4.2.1  # ASGI server for Channels
 
 # Celery for background tasks - already included in base.txt
